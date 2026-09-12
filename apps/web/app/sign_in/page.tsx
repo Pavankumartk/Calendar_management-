@@ -1,65 +1,222 @@
-
 "use client";
 
 import Image from "next/image";
 import { useState } from "react";
 import "./signin.css";
 
-const TENANT_OPTIONS = [
-  "Super Admin",
-  "Platform Admin",
-  "Institute Admin",
-  "Coordinator",
-  "Faculty",
-  "Student",
+/* ========================================
+   ROLE OPTIONS
+======================================== */
+
+const ROLE_OPTIONS = [
+  {
+    label: "Super Admin",
+    value: "SUPER_ADMIN",
+  },
+  {
+    label: "Platform Admin",
+    value: "PLATFORM_ADMIN",
+  },
+  {
+    label: "Institute Admin",
+    value: "TENANT_ADMIN",
+  },
+  {
+    label: "Coordinator",
+    value: "COORDINATOR",
+  },
+  {
+    label: "Faculty",
+    value: "FACULTY",
+  },
+  {
+    label: "Student",
+    value: "LEARNER",
+  },
 ];
 
-const ACTOR_OPTIONS = [
-  "University & College",
-  "Skill Academy",
-  "Bootcamp",
-  "Corporate",
-  "Government",
-  "NGO",
+/* ========================================
+   CURRENTLY CONNECTED TENANTS
+======================================== */
+
+const TENANT_OPTIONS = [
+  {
+    label: "University & College",
+    value: "UNIVERSITY",
+  },
+  {
+    label: "Skill Academy",
+    value: "SKILL_ACADEMY",
+  },
+  {
+    label: "Bootcamp",
+    value: "BOOTCAMP",
+  },
+  {
+    label: "Corporate",
+    value: "CORPORATE",
+  },
 ];
 
 export default function LoginPage() {
-  const [tenant, setTenant] = useState("");
-  const [actor, setActor] = useState("");
+  const [role, setRole] =
+    useState("");
 
-  const tenantOnly =
-    tenant === "Super Admin" ||
-    tenant === "Platform Admin" ||
-    tenant === "Institute Admin";
+  const [tenantType, setTenantType] =
+    useState("");
 
-  const handleTenantChange = (value: string) => {
-    setTenant(value);
+  /* ========================================
+     SUPER ADMIN / PLATFORM ADMIN
+     DO NOT REQUIRE A TENANT
+  ======================================== */
+
+  const isPlatformLevelRole =
+    role === "SUPER_ADMIN" ||
+    role === "PLATFORM_ADMIN";
+
+  /* ========================================
+     ROLE CHANGE
+  ======================================== */
+
+  const handleRoleChange = (
+    value: string
+  ) => {
+    setRole(value);
+
+    /*
+      Super Admin and Platform Admin
+      work across all tenants.
+    */
 
     if (
-      value === "Super Admin" ||
-      value === "Platform Admin" ||
-      value === "Institute Admin"
+      value === "SUPER_ADMIN" ||
+      value === "PLATFORM_ADMIN"
     ) {
-      setActor("");
+      setTenantType("");
     }
   };
 
-  const handleLogin = () => {
-    if (!tenant) return;
-    if (!tenantOnly && !actor) return;
-
-    console.log("Selected Login Data:", {
-      tenant,
-      actor: tenantOnly ? "" : actor,
-    });
-  };
+  /* ========================================
+     LOGIN VALIDATION
+  ======================================== */
 
   const loginDisabled =
-    !tenant || (!tenantOnly && !actor);
+    !role ||
+    (!isPlatformLevelRole &&
+      !tenantType);
+
+  /* ========================================
+     LOGIN
+  ======================================== */
+
+  const handleLogin = () => {
+    if (!role) {
+      alert(
+        "Please select a role."
+      );
+
+      return;
+    }
+
+    if (
+      !isPlatformLevelRole &&
+      !tenantType
+    ) {
+      alert(
+        "Please select a tenant."
+      );
+
+      return;
+    }
+
+    const selectedRole =
+      ROLE_OPTIONS.find(
+        (item) =>
+          item.value === role
+      );
+
+    const selectedTenant =
+      TENANT_OPTIONS.find(
+        (item) =>
+          item.value === tenantType
+      );
+
+    const loginData = {
+      loggedIn: true,
+
+      role,
+
+      displayRole:
+        selectedRole?.label ||
+        role,
+
+      tenantType:
+        isPlatformLevelRole
+          ? "ALL"
+          : tenantType,
+
+      displayTenant:
+        isPlatformLevelRole
+          ? "All Tenants"
+          : selectedTenant?.label ||
+            tenantType,
+
+      loginTime:
+        new Date().toISOString(),
+    };
+
+    console.log(
+      "LOGIN SUCCESS:",
+      loginData
+    );
+
+    /* ========================================
+       SAVE DUMMY LOGIN
+    ======================================== */
+
+    localStorage.setItem(
+      "calendar_dummy_login",
+      JSON.stringify(loginData)
+    );
+
+    localStorage.setItem(
+      "calendar_current_role",
+      role
+    );
+
+    localStorage.setItem(
+      "calendar_current_tenant",
+      loginData.tenantType
+    );
+
+    /* ========================================
+       NAVIGATE TO DASHBOARD FIRST
+
+       Correct flow:
+
+       Sign In
+          ↓
+       Dashboard
+          ↓
+       Sidebar
+          ↓
+       Calendar Management
+          ↓
+       Calendar
+    ======================================== */
+
+    window.location.href =
+      "/dashboard";
+  };
 
   return (
     <main className="loginPage">
-      <section className="loginCard" aria-labelledby="login-title">
+      <section
+        className="loginCard"
+        aria-labelledby="login-title"
+      >
+        {/* LOGO */}
+
         <div className="loginLogoWrap">
           <Image
             src="/images/logo.png"
@@ -71,35 +228,59 @@ export default function LoginPage() {
           />
         </div>
 
-        <h1 id="login-title" className="loginTitle">
+        {/* TITLE */}
+
+        <h1
+          id="login-title"
+          className="loginTitle"
+        >
           NeuroLXP
         </h1>
 
         <p className="loginSubtitle">
-          {tenantOnly
-            ? "Select your tenant"
-            : "Select your tenant and actor"}
+          Select your role and tenant
         </p>
 
         <div className="loginForm">
+          {/* =============================
+              ROLE
+          ============================= */}
+
           <div className="loginField">
-            <label htmlFor="tenant">Tenant</label>
+            <label htmlFor="role">
+              Role
+            </label>
 
             <div className="loginSelectWrap">
               <select
-                id="tenant"
-                value={tenant}
+                id="role"
+                value={role}
                 onChange={(event) =>
-                  handleTenantChange(event.target.value)
+                  handleRoleChange(
+                    event.target.value
+                  )
                 }
               >
-                <option value="">Select Tenant</option>
+                <option value="">
+                  Select Role
+                </option>
 
-                {TENANT_OPTIONS.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
+                {ROLE_OPTIONS.map(
+                  (option) => (
+                    <option
+                      key={
+                        option.value
+                      }
+                      value={
+                        option.value
+                      }
+                    >
+                      {
+                        option.label
+                      }
+                    </option>
+                  )
+                )}
               </select>
 
               <span
@@ -109,40 +290,101 @@ export default function LoginPage() {
             </div>
           </div>
 
-          {!tenantOnly && (
-            <div className="loginField">
-              <label htmlFor="actor">Actor</label>
+          {/* =============================
+              TENANT
 
-              <div className="loginSelectWrap">
-                <select
-                  id="actor"
-                  value={actor}
-                  onChange={(event) =>
-                    setActor(event.target.value)
-                  }
-                >
-                  <option value="">Select Actor</option>
+              Hidden only for:
+              - Super Admin
+              - Platform Admin
+          ============================= */}
 
-                  {ACTOR_OPTIONS.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
+          {role &&
+            !isPlatformLevelRole && (
+              <div className="loginField">
+                <label htmlFor="tenant">
+                  Tenant
+                </label>
+
+                <div className="loginSelectWrap">
+                  <select
+                    id="tenant"
+                    value={
+                      tenantType
+                    }
+                    onChange={(
+                      event
+                    ) =>
+                      setTenantType(
+                        event
+                          .target
+                          .value
+                      )
+                    }
+                  >
+                    <option value="">
+                      Select Tenant
                     </option>
-                  ))}
-                </select>
 
-                <span
-                  className="loginSelectArrow"
-                  aria-hidden="true"
-                />
+                    {TENANT_OPTIONS.map(
+                      (
+                        option
+                      ) => (
+                        <option
+                          key={
+                            option.value
+                          }
+                          value={
+                            option.value
+                          }
+                        >
+                          {
+                            option.label
+                          }
+                        </option>
+                      )
+                    )}
+                  </select>
+
+                  <span
+                    className="loginSelectArrow"
+                    aria-hidden="true"
+                  />
+                </div>
               </div>
-            </div>
+            )}
+
+          {/* =============================
+              PLATFORM ROLE INFORMATION
+          ============================= */}
+
+          {isPlatformLevelRole && (
+            <p
+              style={{
+                margin: 0,
+
+                fontSize:
+                  "13px",
+
+                color:
+                  "#6b7280",
+              }}
+            >
+              This role has access
+              to all tenants.
+            </p>
           )}
+
+          {/* LOGIN */}
 
           <button
             type="button"
             className="loginButton"
-            disabled={loginDisabled}
-            onClick={handleLogin}
+            disabled={
+              loginDisabled
+            }
+            onClick={
+              handleLogin
+            }
           >
             Login
           </button>
@@ -151,4 +393,3 @@ export default function LoginPage() {
     </main>
   );
 }
-
