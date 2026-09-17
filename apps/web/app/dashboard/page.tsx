@@ -127,7 +127,7 @@ export default function DashboardPage() {
               color: "#6b7280",
             }}
           >
-            {user.tenantName || user.tenantId}
+            {user.displayTenant || user.tenantType}
           </p>
 
           <div
@@ -223,4 +223,3 @@ function DashboardCard({
     </div>
   );
 }
-

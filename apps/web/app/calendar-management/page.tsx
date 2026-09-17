@@ -2837,7 +2837,11 @@ export default function CalendarManagementPage() {
           ================================== */}
 
           {calendar ? (
-            <>
+            <div
+              style={{
+                minWidth: 0,
+              }}
+            >
               <div
                 style={{
                   display: "flex",
@@ -2900,7 +2904,7 @@ export default function CalendarManagementPage() {
                   : handleEventMove
               }
             />
-            </>
+            </div>
           ) : (
             <div
               style={{
