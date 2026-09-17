@@ -169,11 +169,56 @@ export const calendarService = {
       audience?: string
     ) => {
       if (!audience) return false;
-      if (audience === "All Allowed Users") return true;
 
-      if (audience === "Platform Admins") {
-        return role === "PLATFORM_ADMIN";
+      // New audience model:
+      // DEFAULT:<publisher role>
+      // TENANT:<tenant type>
+      // ACTOR:<recipient role>
+      if (audience.startsWith("TENANT_ACTOR:")) {
+        const [, targetTenant, targetRole] =
+          audience.split(":");
+
+        return (
+          targetTenant === tenantId &&
+          targetRole === role
+        );
       }
+
+      if (audience.startsWith("ACTOR:")) {
+        return (
+          audience.slice("ACTOR:".length) === role
+        );
+      }
+
+      if (audience.startsWith("TENANT:")) {
+        return (
+          audience.slice("TENANT:".length) === tenantId
+        );
+      }
+
+      if (audience.startsWith("DEFAULT:")) {
+        const publisherRole =
+          audience.slice("DEFAULT:".length);
+
+        const roleLevel: Record<string, number> = {
+          SUPER_ADMIN: 5,
+          PLATFORM_ADMIN: 4,
+          TENANT_ADMIN: 3,
+          COORDINATOR: 2,
+          FACULTY: 1,
+          LEARNER: 0,
+        };
+
+        return (
+          roleLevel[role] !== undefined &&
+          roleLevel[publisherRole] !== undefined &&
+          roleLevel[role] < roleLevel[publisherRole]
+        );
+      }
+
+      // Compatibility with previously published events.
+      if (audience === "All Allowed Users") return true;
+      if (audience === "Platform Admins") return role === "PLATFORM_ADMIN";
 
       if (
         [
@@ -186,16 +231,10 @@ export const calendarService = {
         return role === "TENANT_ADMIN";
       }
 
-      if (audience === "Coordinators") {
-        return role === "COORDINATOR";
-      }
+      if (audience === "Coordinators") return role === "COORDINATOR";
 
       if (
-        [
-          "Faculty",
-          "Trainers",
-          "Instructors / Mentors",
-        ].includes(audience)
+        ["Faculty", "Trainers", "Instructors / Mentors"].includes(audience)
       ) {
         return role === "FACULTY";
       }
@@ -206,23 +245,9 @@ export const calendarService = {
           "Skill Academy Learners",
           "Bootcamp Learners",
           "Employees",
+          "Learners / Employees",
         ].includes(audience)
       ) {
-        return role === "LEARNER";
-      }
-
-      // Compatibility with already-saved older events.
-      if (audience === "Admins") {
-        return [
-          "SUPER_ADMIN",
-          "PLATFORM_ADMIN",
-          "TENANT_ADMIN",
-        ].includes(role);
-      }
-      if (audience === "Faculty / Trainers") {
-        return role === "FACULTY";
-      }
-      if (audience === "Learners / Employees") {
         return role === "LEARNER";
       }
 

@@ -3,6 +3,7 @@
 import {
   useEffect,
   useState,
+  useRef,
   type FormEvent,
   type ReactNode,
 } from "react";
@@ -238,35 +239,32 @@ const SUPER_ADMIN_EXTRA_DATA_POINTS: EventDataPoint[] = [
 ];
 
 const PLATFORM_ADMIN_EXTRA_DATA_POINTS: EventDataPoint[] = [
-  { key: "registrationRequired", label: "Registration Required", placeholder: "Yes / No" },
-  { key: "participantLimit", label: "Participant Limit" },
-  { key: "attendanceRequired", label: "Attendance Required", placeholder: "Yes / No" },
 ];
 
 const ROLE_TENANT_DATA_POINTS: Record<string, Record<string, EventDataPoint[]>> = {
   UNIVERSITY: {
-    TENANT_ADMIN: ["Campus", "School / College", "Department", "Program", "Degree", "Academic Year", "Semester", "Batch / Cohort", "Section", "Course", "Subject"].map((label) => ({ key: label, label })),
-    COORDINATOR: ["Department", "Program", "Academic Year", "Semester", "Batch / Cohort", "Section", "Course", "Subject", "Faculty", "Student Group"].map((label) => ({ key: label, label })),
-    FACULTY: ["Department", "Program", "Semester", "Batch", "Section", "Course", "Subject", "Class / Student Group"].map((label) => ({ key: label, label })),
+    TENANT_ADMIN: ["Campus", "School / College", "Department", "Program", "Degree", "Academic Year", "Semester", "Section", "Subject"].map((label) => ({ key: label, label })),
+    COORDINATOR: ["Department", "Program", "Academic Year", "Semester", "Section", "Subject", "Faculty", "Student Group"].map((label) => ({ key: label, label })),
+    FACULTY: ["Department", "Program", "Semester", "Batch", "Section", "Subject", "Class / Student Group"].map((label) => ({ key: label, label })),
     LEARNER: ["Program", "Semester", "Batch", "Section", "Enrolled Course / Subject", "Student Club / Group"].map((label) => ({ key: label, label })),
   },
   SKILL_ACADEMY: {
-    TENANT_ADMIN: ["Academy / Center", "Skill Domain", "Program", "Course", "Batch / Cohort", "Training Track", "Trainer", "Learner Group"].map((label) => ({ key: label, label })),
-    COORDINATOR: ["Center", "Skill Domain", "Program", "Course", "Batch", "Training Track", "Trainer", "Learner Group"].map((label) => ({ key: label, label })),
-    FACULTY: ["Program", "Course", "Batch", "Module", "Session", "Learner Group"].map((label) => ({ key: label, label })),
-    LEARNER: ["Enrolled Program", "Course", "Batch", "Module", "Learner Group"].map((label) => ({ key: label, label })),
+    TENANT_ADMIN: ["Skill Domain", "Program", "Training Track", "Trainer"].map((label) => ({ key: label, label })),
+    COORDINATOR: ["Center", "Skill Domain", "Program", "Batch", "Training Track", "Trainer"].map((label) => ({ key: label, label })),
+    FACULTY: ["Program", "Batch", "Session"].map((label) => ({ key: label, label })),
+    LEARNER: ["Enrolled Program", "Batch"].map((label) => ({ key: label, label })),
   },
   BOOTCAMP: {
-    TENANT_ADMIN: ["Bootcamp Program", "Track", "Cohort", "Batch", "Module", "Phase", "Instructor / Mentor", "Learner Group"].map((label) => ({ key: label, label })),
-    COORDINATOR: ["Program", "Track", "Cohort", "Batch", "Module", "Phase", "Instructor / Mentor", "Learner Group"].map((label) => ({ key: label, label })),
-    FACULTY: ["Assigned Program", "Cohort", "Batch", "Module", "Session", "Learner Group"].map((label) => ({ key: label, label })),
-    LEARNER: ["Enrolled Bootcamp", "Track", "Cohort", "Module", "Project / Group"].map((label) => ({ key: label, label })),
+    TENANT_ADMIN: ["Batch", "Phase", "Instructor / Mentor"].map((label) => ({ key: label, label })),
+    COORDINATOR: ["Program", "Batch", "Phase", "Instructor / Mentor"].map((label) => ({ key: label, label })),
+    FACULTY: ["Assigned Program", "Batch", "Session"].map((label) => ({ key: label, label })),
+    LEARNER: ["Enrolled Bootcamp", "Project / Group"].map((label) => ({ key: label, label })),
   },
   CORPORATE: {
-    TENANT_ADMIN: ["Business Unit", "Department", "Location / Branch", "Team", "Job Role / Designation", "Employee Group", "Training Program", "Course", "Batch / Cohort", "Manager"].map((label) => ({ key: label, label })),
-    COORDINATOR: ["Business Unit", "Department", "Team", "Employee Group", "Training Program", "Course", "Batch", "Trainer", "Manager"].map((label) => ({ key: label, label })),
-    FACULTY: ["Training Program", "Course", "Batch", "Module", "Session", "Employee / Learner Group"].map((label) => ({ key: label, label })),
-    LEARNER: ["Assigned Training Program", "Course", "Batch", "Module", "Team"].map((label) => ({ key: label, label })),
+    TENANT_ADMIN: ["Business Unit", "Department", "Location / Branch", "Job Role / Designation", "Training Program", "Manager"].map((label) => ({ key: label, label })),
+    COORDINATOR: ["Business Unit", "Department", "Training Program", "Batch", "Trainer", "Manager"].map((label) => ({ key: label, label })),
+    FACULTY: ["Training Program", "Batch", "Session", "Employee / Learner Group"].map((label) => ({ key: label, label })),
+    LEARNER: ["Assigned Training Program", "Batch"].map((label) => ({ key: label, label })),
   },
 };
 
@@ -285,6 +283,301 @@ function getDataPointsForContext(loginData: LoginData | null): EventDataPoint[] 
    PAGE
 ======================================== */
 
+const overlayStyle: React.CSSProperties = {
+  position: "fixed",
+  inset: 0,
+  zIndex: 2000,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: "20px",
+  background: "rgba(15, 23, 42, 0.45)",
+};
+
+const modalStyle: React.CSSProperties = {
+  width: "100%",
+  maxWidth: "560px",
+  maxHeight: "90vh",
+  overflowY: "auto",
+  padding: "24px",
+  borderRadius: "14px",
+  background: "#ffffff",
+  boxShadow: "0 20px 50px rgba(15, 23, 42, 0.20)",
+};
+
+const EVENT_OPTIONS_BY_CONTEXT: Record<string, Array<{ title: string; subtitles: string[] }>> = {
+  SUPER_ADMIN: [
+    { title: "Platform Communication", subtitles: ["Platform Announcement", "Important Notice", "Training Announcement", "Holiday Announcement", "Maintenance Announcement", "Feature Release Announcement", "Service Update"] },
+    { title: "Institute & Tenant Management", subtitles: ["Institute Onboarding", "Institute Orientation", "Institute Review", "Institute Access Review", "Institute Renewal", "Tenant Activation", "Tenant Deactivation", "Institute Configuration Review"] },
+    { title: "Administration & Access Management", subtitles: ["Admin Meeting", "Admin Training", "Platform Orientation", "User Access Review", "Role & Permission Review", "Administrator Access Review", "Privileged Access Review", "Access Audit"] },
+    { title: "Policy, Compliance & Governance", subtitles: ["Policy Update", "Compliance Review", "Governance Review", "Security Policy Review", "Privacy Review", "Regulatory Review", "Audit Review", "Content Governance Review"] },
+    { title: "Subscription & Licensing", subtitles: ["Subscription Renewal", "Subscription Expiry", "License Renewal", "License Expiry", "Institute Renewal", "Plan Upgrade / Downgrade", "Subscription Review", "License Allocation Review"] },
+    { title: "Platform Monitoring & Performance", subtitles: ["Usage Review", "Performance Review", "Platform Health Review", "Capacity Review", "Adoption Review", "Activity Review", "System Performance Review", "Service Availability Review"] },
+    { title: "Reports & Analytics Review", subtitles: ["Reports Review", "Usage Analytics Review", "Institute Analytics Review", "Compliance Report Review", "Adoption Report Review", "Performance Report Review", "Executive Dashboard Review"] },
+    { title: "Support & Feedback Management", subtitles: ["Feedback Review", "Support Review", "Institute Feedback Review", "Escalation Review", "Support Performance Review", "Service Issue Review", "Resolution Review"] },
+    { title: "Content & Academic Governance", subtitles: ["Content Governance Review", "Learning Content Review", "Academic Calendar Review", "Course Content Review", "Content Compliance Review", "Publishing Review", "Content Quality Review"] },
+    { title: "Meetings & Stakeholder Engagement", subtitles: ["Stakeholder Meeting", "Admin Meeting", "Institute Meeting", "Leadership Meeting", "Governance Meeting", "Partner Meeting", "Review Meeting", "Webinar"] },
+    { title: "Periodic & Strategic Reviews", subtitles: ["Quarterly Review", "Annual Review", "Monthly Review", "Strategic Review", "Platform Roadmap Review", "Service Review", "Institute Portfolio Review", "Annual Planning Review"] },
+    { title: "Others", subtitles: ["Others"] },
+  ],
+  PLATFORM_ADMIN: [
+    { title: "Platform Operations & Maintenance", subtitles: ["LMS Maintenance", "Scheduled Maintenance", "System Downtime", "Platform Upgrade", "Infrastructure Maintenance", "Maintenance Completion"] },
+    { title: "Modules & Feature Management", subtitles: ["Module Update", "Assessment Module Update", "Attendance Module Update", "Calendar Update", "Reporting Update", "Notification Update", "Feature Enablement", "Feature Configuration"] },
+    { title: "Release & Change Management", subtitles: ["Release Review", "New Release", "Feature Release", "Version Upgrade", "Change Review", "Deployment Window", "Release Validation", "Post-Release Review"] },
+    { title: "User, Role & Access Management", subtitles: ["User Management Review", "Access Review", "Role Review", "Permission Review", "Privileged Access Review", "User Activation / Deactivation", "Access Audit"] },
+    { title: "Content & Course Administration", subtitles: ["Content Review", "Course Publishing Window", "Course Publishing Review", "Content Approval", "Content Quality Review", "Content Update", "Course Archive"] },
+    { title: "Integration & Configuration", subtitles: ["Integration Update", "Integration Review", "API Configuration", "SSO Configuration", "External System Integration", "Platform Configuration", "Notification Configuration"] },
+    { title: "System Monitoring & Performance", subtitles: ["System Health Review", "Performance Review", "Availability Review", "Capacity Review", "Error / Incident Review", "Usage Monitoring", "Security Health Review"] },
+    { title: "Training & Orientation", subtitles: ["Feature Training", "Admin Training", "Platform Orientation", "Module Training", "Configuration Training", "Refresher Training", "Release Training"] },
+    { title: "Support & Issue Management", subtitles: ["Support Session", "Technical Support", "Admin Support", "Issue Review", "Incident Review", "Escalation Review", "Resolution Review", "Troubleshooting Session"] },
+    { title: "Others", subtitles: ["Others"] },
+  ],
+  UNIVERSITY: [
+    { title: "Academic Calendar", subtitles: ["Academic Year Start", "Academic Year End", "Semester Start", "Semester End", "Term / Trimester Dates", "Academic Milestone", "Academic Holiday", "Institutional Closure"] },
+    { title: "Registration & Enrollment", subtitles: ["Course Registration", "Registration Opening", "Registration Deadline", "Course Enrollment", "Enrollment Deadline", "Add / Drop Period", "Course Withdrawal", "Re-registration"] },
+    { title: "Classes & Learning Activities", subtitles: ["Lecture", "Guest / Expert Lecture", "Lab Session", "Practical Session", "Tutorial", "Workshop", "Seminar", "Training Session", "Orientation Program", "Class Schedule", "Timetable Update", "Field Visit", "Industrial Visit", "Study Tour"] },
+    { title: "Assignments & Assessments", subtitles: ["Assignment Publication", "Assignment Submission", "Assignment Deadline", "Quiz", "Class Test", "Internal Assessment", "Continuous Assessment", "Presentation", "Viva / Oral Assessment", "Practical Assessment"] },
+    { title: "Examinations & Results", subtitles: ["Mid-Semester Examination", "End-Semester Examination", "University Examination", "Supplementary Examination", "Re-examination", "Examination Registration", "Examination Deadline", "Hall Ticket / Admit Card", "Result Publication", "Revaluation"] },
+    { title: "Projects & Research", subtitles: ["Project Allocation", "Project Review", "Project Presentation", "Project Submission", "Project Deadline", "Dissertation", "Thesis", "Research Review", "Research Presentation", "Research Submission"] },
+    { title: "Academic Progress & Student Support", subtitles: ["Attendance Review", "Attendance Shortage Notice", "Academic Progress Review", "Mentoring Session", "Academic Advising", "Remedial Session", "Student Counseling", "Parent Meeting"] },
+    { title: "Career & Professional Development", subtitles: ["Placement Training", "Placement Drive", "Career Guidance", "Internship", "Internship Application", "Internship Deadline", "Internship Review", "Internship Completion", "Skill Development Program", "Certification Program"] },
+    { title: "Academic Meetings & Governance", subtitles: ["Faculty Meeting", "Department Meeting", "Academic Review Meeting", "Curriculum Meeting", "Board of Studies Meeting", "Committee Meeting", "Course Review Meeting", "Student Review Meeting"] },
+    { title: "Institutional & Student Events", subtitles: ["Convocation", "Graduation Ceremony", "Annual Day", "College / University Event", "Department Event", "Student Club Event", "Cultural Event", "Sports Event", "Competition", "Conference", "Symposium"] },
+    { title: "Others", subtitles: ["Others"] },
+  ],
+  SKILL_ACADEMY: [
+    { title: "Program & Batch Management", subtitles: ["Program Launch", "Program Completion", "Batch Start", "Batch End", "Batch Schedule", "Batch Update", "Learner Orientation"] },
+    { title: "Enrollment & Access", subtitles: ["Course Enrollment", "Enrollment Opening", "Enrollment Deadline", "Enrollment Confirmation", "Course Access Start", "Course Access End", "Re-enrollment"] },
+    { title: "Training & Learning Activities", subtitles: ["Training Session", "Trainer-led Session", "Module Start", "Module Completion", "Practical Session", "Hands-on Practice", "Skill Workshop", "Academy Workshop", "Live Session", "Expert Session", "Industry Session"] },
+    { title: "Assignments & Assessments", subtitles: ["Assignment", "Assignment Deadline", "Practice Test", "Quiz", "Skill Assessment", "Practical Assessment", "Module Assessment", "Final Assessment", "Assessment Deadline", "Assessment Result"] },
+    { title: "Projects & Capstone", subtitles: ["Project Start", "Project Milestone", "Project Review", "Project Presentation", "Project Submission", "Project Deadline", "Capstone Project", "Capstone Review", "Capstone Submission"] },
+    { title: "Learner Support & Mentoring", subtitles: ["Mentor Session", "Doubt Clearing Session", "Learner Support Session", "One-to-One Mentoring", "Group Mentoring", "Progress Review", "Performance Feedback", "Remedial Session"] },
+    { title: "Industry & Career Development", subtitles: ["Industry Session", "Industry Expert Talk", "Career Guidance", "Resume Preparation", "Mock Interview", "Interview Preparation", "Placement Preparation", "Placement Drive", "Employer Interaction", "Job Readiness Session"] },
+    { title: "Certification", subtitles: ["Certification Preparation", "Certification Registration", "Certification Exam", "Certification Deadline", "Certification Result", "Certification Completion", "Certificate Issuance", "Certificate Renewal"] },
+    { title: "Academy Events & Engagement", subtitles: ["Academy Workshop", "Webinar", "Seminar", "Bootcamp", "Hackathon", "Competition", "Community Event", "Networking Session", "Learner Showcase", "Demo Day"] },
+    { title: "Academy Calendar & Notices", subtitles: ["Academy Holiday", "Training Holiday", "Schedule Change", "Session Rescheduling", "Academy Closure", "Important Deadline", "General Announcement"] },
+    { title: "Others", subtitles: ["Others"] },
+  ],
+  BOOTCAMP: [
+    { title: "Bootcamp & Cohort Management", subtitles: ["Bootcamp Kickoff", "Bootcamp Completion", "Cohort Start", "Cohort End", "Cohort Orientation", "Cohort Schedule", "Cohort Update"] },
+    { title: "Modules & Learning Sessions", subtitles: ["Module Start", "Module Completion", "Module Deadline", "Live Session", "Technical Session", "Live Coding Session", "Practice Session", "Instructor-led Session", "Workshop", "Expert Session"] },
+    { title: "Assignments & Coding Challenges", subtitles: ["Assignment", "Assignment Deadline", "Coding Challenge", "Challenge Deadline", "Practice Challenge", "Technical Exercise", "Coding Task", "Challenge Review"] },
+    { title: "Assessments & Code Evaluation", subtitles: ["Technical Assessment", "Coding Assessment", "Practical Assessment", "Module Assessment", "Final Assessment", "Code Review", "Assessment Deadline", "Assessment Result"] },
+    { title: "Sprints & Agile Activities", subtitles: ["Sprint Start", "Sprint Planning", "Sprint Activities", "Sprint Deadline", "Sprint Review", "Sprint Retrospective", "Stand-up Session", "Sprint Demo"] },
+    { title: "Projects & Capstone", subtitles: ["Project Kickoff", "Project Sprint", "Project Milestone", "Project Development Session", "Project Review", "Project Submission", "Project Deadline", "Capstone Project", "Demo Preparation", "Demo Day"] },
+    { title: "Mentoring & Learner Support", subtitles: ["Mentor Session", "Doubt Clearing Session", "One-to-One Mentoring", "Group Mentoring", "Progress Review", "Technical Guidance", "Performance Feedback", "Remedial Session"] },
+    { title: "Hackathons & Community Events", subtitles: ["Hackathon", "Coding Competition", "Team Challenge", "Innovation Challenge", "Community Session", "Networking Session", "Learner Showcase"] },
+    { title: "Career & Placement", subtitles: ["Career Preparation", "Resume Preparation", "Portfolio Review", "Mock Interview", "Technical Interview Preparation", "Hiring Partner Session", "Employer Interaction", "Placement Drive", "Job Readiness Session"] },
+    { title: "Completion & Recognition", subtitles: ["Bootcamp Completion", "Graduation Day", "Certificate Issuance", "Completion Certificate", "Learner Recognition", "Achievement / Award"] },
+    { title: "Others", subtitles: ["Others"] },
+  ],
+  CORPORATE: [
+    { title: "Onboarding & Induction", subtitles: ["Employee Onboarding", "New Hire Orientation", "Onboarding Training", "Onboarding Deadline", "Induction Program", "Role Induction", "Probation Learning Review"] },
+    { title: "Training & Learning Programs", subtitles: ["Training Program Start", "Training Program End", "Assigned Training", "Mandatory Training", "Annual Training", "Role-Based Training", "Product Training", "Process Training", "Technical Training", "Soft Skills Training", "Refresher Training", "Cross-Functional Training", "Course Deadline"] },
+    { title: "Compliance & Policy", subtitles: ["Compliance Training", "Compliance Deadline", "Policy Training", "Policy Update Session", "Code of Conduct Training", "Regulatory Training", "Workplace Safety Training", "Ethics Training", "Anti-Harassment Training", "Compliance Renewal"] },
+    { title: "Security & Data Protection", subtitles: ["Cybersecurity Training", "Security Awareness", "Data Privacy Training", "Information Security Training", "Phishing Awareness", "Security Policy Update", "Security Assessment"] },
+    { title: "Skills & Capability Development", subtitles: ["Skill Development", "Functional Skill Training", "Technical Skill Development", "Professional Skill Development", "Digital Skill Development", "Upskilling", "Reskilling", "Skill Gap Training", "Capability Development"] },
+    { title: "Leadership & Management Development", subtitles: ["Leadership Training", "Manager Training", "First-Time Manager Training", "Leadership Development Program", "People Management Training", "Team Management Training", "Decision-Making Workshop", "Succession Development"] },
+    { title: "Workshops & Knowledge Sharing", subtitles: ["Workshop", "Webinar", "Knowledge Sharing", "Expert Session", "Internal Learning Session", "Community of Practice", "Best Practice Sharing", "Lunch & Learn", "Conference", "Seminar"] },
+    { title: "Assessment & Learning Evaluation", subtitles: ["Assessment", "Skill Assessment", "Knowledge Assessment", "Training Assessment", "Competency Assessment", "Pre-Assessment", "Post-Assessment", "Learning Evaluation", "Assessment Deadline", "Assessment Result"] },
+    { title: "Certification & Accreditation", subtitles: ["Certification Program", "Certification Preparation", "Certification Exam", "Certification Deadline", "Certification Completion", "Certification Renewal", "Certification Expiry", "Certificate Issuance", "External Accreditation"] },
+    { title: "Coaching, Mentoring & Performance Development", subtitles: ["Coaching Session", "Mentoring Session", "One-to-One Coaching", "Peer Mentoring", "Performance Development", "Learning Review", "Development Plan Review", "Career Development", "Progress Review", "Feedback Session"] },
+    { title: "Organization & Employee Engagement", subtitles: ["Town Hall", "Organization-Wide Session", "Department Meeting", "Team Learning Event", "Leadership Communication", "Employee Engagement Session", "Culture & Values Session", "Change Management Session", "Organizational Announcement"] },
+    { title: "Others", subtitles: ["Others"] },
+  ],
+};
+function getDocumentEventOptions(loginData: LoginData | null) {
+  if (!loginData) return EVENT_OPTIONS_BY_CONTEXT.UNIVERSITY;
+  if (loginData.role === "SUPER_ADMIN") return EVENT_OPTIONS_BY_CONTEXT.SUPER_ADMIN;
+  if (loginData.role === "PLATFORM_ADMIN") return EVENT_OPTIONS_BY_CONTEXT.PLATFORM_ADMIN;
+  return EVENT_OPTIONS_BY_CONTEXT[loginData.tenantType] || EVENT_OPTIONS_BY_CONTEXT.UNIVERSITY;
+}
+
+const EXPORT_MONTHS = [
+  ["01","January"],["02","February"],["03","March"],["04","April"],
+  ["05","May"],["06","June"],["07","July"],["08","August"],
+  ["09","September"],["10","October"],["11","November"],["12","December"],
+] as const;
+
+const actionMenuButtonStyle: React.CSSProperties = {
+  display: "block",
+  width: "100%",
+  padding: "9px 10px",
+  border: "none",
+  borderRadius: "6px",
+  background: "transparent",
+  textAlign: "left",
+  cursor: "pointer",
+  color: "#374151",
+};
+
+
+function ScrollableEventDropdown({
+  value,
+  placeholder,
+  options,
+  onChange,
+  disabled = false,
+}: {
+  value: string;
+  placeholder: string;
+  options: string[];
+  onChange: (value: string) => void;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    const close = (event: MouseEvent) => {
+      if (
+        wrapperRef.current &&
+        !wrapperRef.current.contains(event.target as Node)
+      ) {
+        setOpen(false);
+        setSearch("");
+      }
+    };
+
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, []);
+
+  const filteredOptions = options.filter((option) =>
+    option.toLowerCase().includes(search.trim().toLowerCase())
+  );
+
+  const openDropdown = () => {
+    if (disabled) return;
+    setOpen(true);
+    setSearch("");
+    requestAnimationFrame(() => inputRef.current?.focus());
+  };
+
+  return (
+    <div ref={wrapperRef} style={{ position: "relative", width: "100%" }}>
+      <div style={{ position: "relative", width: "100%" }}>
+        <input
+          ref={inputRef}
+          type="text"
+          value={open ? search : value}
+          placeholder={placeholder}
+          disabled={disabled}
+          onFocus={openDropdown}
+          onClick={openDropdown}
+          onChange={(event) => {
+            if (disabled) return;
+            setSearch(event.target.value);
+            setOpen(true);
+          }}
+          style={{
+            ...inputStyle,
+            width: "100%",
+            minHeight: "42px",
+            paddingRight: "40px",
+            background: disabled ? "#f9fafb" : "#ffffff",
+            cursor: disabled ? "not-allowed" : "text",
+          }}
+        />
+
+        <button
+          type="button"
+          aria-label="Toggle options"
+          disabled={disabled}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => {
+            if (disabled) return;
+
+            if (open) {
+              setOpen(false);
+              setSearch("");
+            } else {
+              openDropdown();
+            }
+          }}
+          style={{
+            position: "absolute",
+            right: "7px",
+            top: "50%",
+            transform: "translateY(-50%)",
+            width: "30px",
+            height: "30px",
+            padding: 0,
+            border: "none",
+            background: "transparent",
+            color: "#6b7280",
+            cursor: disabled ? "not-allowed" : "pointer",
+          }}
+        >
+          ▾
+        </button>
+      </div>
+
+      {open && !disabled && (
+        <div
+          onWheel={(event) => event.stopPropagation()}
+          style={{
+            position: "absolute",
+            top: "calc(100% + 4px)",
+            left: 0,
+            right: 0,
+            zIndex: 6000,
+            maxHeight: "220px",
+            overflowY: "auto",
+            overscrollBehavior: "contain",
+            padding: "4px",
+            border: "1px solid #d1d5db",
+            borderRadius: "8px",
+            background: "#ffffff",
+            boxShadow: "0 8px 20px rgba(15,23,42,0.14)",
+          }}
+        >
+          {filteredOptions.length > 0 ? (
+            filteredOptions.map((option) => (
+              <button
+                key={option}
+                type="button"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => {
+                  onChange(option);
+                  setOpen(false);
+                  setSearch("");
+                }}
+                style={{
+                  display: "block",
+                  width: "100%",
+                  padding: "9px 10px",
+                  border: "none",
+                  borderRadius: "6px",
+                  background: option === value ? "#f3f4f6" : "transparent",
+                  color: "#111827",
+                  textAlign: "left",
+                  cursor: "pointer",
+                  fontSize: "14px",
+                }}
+              >
+                {option}
+              </button>
+            ))
+          ) : (
+            <div
+              style={{
+                padding: "10px",
+                color: "#6b7280",
+                fontSize: "13px",
+              }}
+            >
+              No matching results
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function CalendarManagementPage() {
   const router = useRouter();
 
@@ -296,6 +589,10 @@ export default function CalendarManagementPage() {
 
   const [events, setEvents] =
     useState<CalendarEvent[]>([]);
+  const [filterTenant, setFilterTenant] = useState("ALL");
+  const [filterRole, setFilterRole] = useState("ALL");
+  const [filterStatus, setFilterStatus] = useState("ALL");
+
 
   const [loading, setLoading] =
     useState(true);
@@ -337,6 +634,9 @@ export default function CalendarManagementPage() {
   const [showAttachmentOptions, setShowAttachmentOptions] =
     useState(false);
 
+  const [showAttachmentActionMenu, setShowAttachmentActionMenu] =
+    useState(false);
+
   const [attachmentType, setAttachmentType] =
     useState("");
 
@@ -366,6 +666,41 @@ export default function CalendarManagementPage() {
     useState("");
 
   const [publishAudience, setPublishAudience] =
+    useState("");
+
+  const [showAudienceOptions, setShowAudienceOptions] =
+    useState(false);
+
+  const [publishAudienceMode, setPublishAudienceMode] =
+    useState<"DEFAULT" | "TENANT" | "ACTOR">("DEFAULT");
+
+  const [publishAudienceTarget, setPublishAudienceTarget] =
+    useState("");
+
+  const [publishTenantTarget, setPublishTenantTarget] =
+    useState("");
+
+  const [publishOrganizer, setPublishOrganizer] =
+    useState("");
+
+  const [publishAction, setPublishAction] =
+    useState<"PUBLISH" | "AUTO_PUBLISH">("PUBLISH");
+
+  const [showAutoPublishModal, setShowAutoPublishModal] =
+    useState(false);
+
+  const [autoPublishDate, setAutoPublishDate] =
+    useState("");
+
+  const [autoPublishTime, setAutoPublishTime] =
+    useState("");
+  const [showExportCalendar, setShowExportCalendar] = useState(false);
+  const [exportMonth, setExportMonth] = useState("");
+  const [exportYear, setExportYear] = useState(String(new Date().getFullYear()));
+
+  const [reminderEvent, setReminderEvent] =
+    useState<CalendarEvent | null>(null);
+  const [reminderDescription, setReminderDescription] =
     useState("");
 
   const [showCalendarEditModal, setShowCalendarEditModal] =
@@ -814,6 +1149,526 @@ export default function CalendarManagementPage() {
   }
 
   /* ========================================
+     AUTO PUBLISH CHECK
+     Scheduled -> Published when start date/time arrives
+  ======================================== */
+
+  useEffect(() => {
+    const checkAutoPublishEvents = () => {
+      const now = Date.now();
+      let changed = false;
+
+      events.forEach((event) => {
+        const scheduledEvent =
+          event as CalendarEvent & {
+            status?: string;
+            dataPoints?: Record<string, string>;
+          };
+
+        if (
+          scheduledEvent.status !==
+          "SCHEDULED"
+        ) {
+          return;
+        }
+
+        const scheduledAt =
+          scheduledEvent.dataPoints
+            ?.scheduledAt;
+
+        if (!scheduledAt) {
+          return;
+        }
+
+        const scheduledTime =
+          new Date(scheduledAt).getTime();
+
+        if (
+          Number.isNaN(scheduledTime) ||
+          scheduledTime > now
+        ) {
+          return;
+        }
+
+        calendarService.updateEvent(
+          scheduledEvent.id,
+          {
+            status: "PUBLISHED",
+            dataPoints: {
+              ...(scheduledEvent.dataPoints ||
+                {}),
+              publishedAt:
+                new Date().toISOString(),
+            },
+          } as Partial<CalendarEvent>
+        );
+
+        changed = true;
+      });
+
+      if (changed) {
+        refreshEvents();
+      }
+    };
+
+    checkAutoPublishEvents();
+
+    const timer = window.setInterval(
+      checkAutoPublishEvents,
+      1000
+    );
+
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [
+    events,
+    calendar?.id,
+    loginData?.role,
+    loginData?.tenantType,
+  ]);
+
+  function openReminderConfirmation(
+    event: CalendarEvent
+  ) {
+    setOpenActionEventId(null);
+    setReminderDescription("");
+    setReminderEvent(event);
+  }
+
+  function handleSendReminder() {
+    if (!reminderEvent) {
+      return;
+    }
+
+    const current =
+      reminderEvent as CalendarEvent & {
+        dataPoints?: Record<string, string>;
+      };
+
+    calendarService.updateEvent(
+      reminderEvent.id,
+      {
+        dataPoints: {
+          ...(current.dataPoints || {}),
+          reminderSentAt:
+            new Date().toISOString(),
+          reminderDescription:
+            reminderDescription.trim(),
+        },
+      } as Partial<CalendarEvent>
+    );
+
+    const eventTitle =
+      reminderEvent.title ||
+      "Calendar Event";
+
+    setReminderEvent(null);
+    setReminderDescription("");
+    refreshEvents();
+
+    alert(
+      `Reminder notification sent successfully for "${eventTitle}".`
+    );
+  }
+
+
+  function handleExportCalendar() {
+    if (!exportMonth || !exportYear) {
+      alert("Please select month and year.");
+      return;
+    }
+
+    const selected = [...events]
+      .filter((event) => {
+        const [year, month] =
+          (event.startDate || "").split("-");
+
+        return (
+          year === exportYear &&
+          month === exportMonth
+        );
+      })
+      .sort((a, b) =>
+        `${a.startDate} ${a.startTime || "00:00"}`.localeCompare(
+          `${b.startDate} ${b.startTime || "00:00"}`
+        )
+      );
+
+    const monthName =
+      EXPORT_MONTHS.find(
+        ([value]) => value === exportMonth
+      )?.[1] || exportMonth;
+
+    const pdfEscape = (value: unknown) =>
+      String(value ?? "")
+        .replace(/[^\x20-\x7E]/g, " ")
+        .replace(/\\/g, "\\\\")
+        .replace(/\(/g, "\\(")
+        .replace(/\)/g, "\\)");
+
+    const shorten = (
+      value: unknown,
+      maxLength: number
+    ) => {
+      const clean = String(value ?? "-")
+        .replace(/\s+/g, " ")
+        .trim();
+
+      if (!clean) return "-";
+
+      return clean.length > maxLength
+        ? `${clean.slice(
+            0,
+            Math.max(0, maxLength - 3)
+          )}...`
+        : clean;
+    };
+
+    /*
+      Landscape A4-style PDF table.
+      Column widths total 762 points.
+    */
+    const columns = [
+      { label: "Title", width: 110 },
+      { label: "Subtitle", width: 95 },
+      { label: "Start", width: 100 },
+      { label: "End", width: 100 },
+      { label: "Organizer", width: 90 },
+      { label: "Audience", width: 105 },
+      { label: "Status", width: 72 },
+      { label: "Description", width: 90 },
+    ];
+
+    const pageWidth = 842;
+    const pageHeight = 595;
+    const marginX = 40;
+    const tableTop = 510;
+    const rowHeight = 25;
+    const headerHeight = 28;
+    const rowsPerPage = 16;
+
+    const tableRows = selected.map(
+      (event) => {
+        const current =
+          event as CalendarEvent & {
+            status?: string;
+            dataPoints?: Record<string, string>;
+          };
+
+        return [
+          shorten(event.title, 22),
+          shorten(event.eventType, 18),
+          shorten(
+            `${event.startDate || "-"} ${
+              event.startTime || ""
+            }`,
+            20
+          ),
+          shorten(
+            `${event.endDate || "-"} ${
+              event.endTime || ""
+            }`,
+            20
+          ),
+          shorten(
+            current.dataPoints?.organizer,
+            16
+          ),
+          shorten(event.audience, 19),
+          shorten(current.status, 12),
+          shorten(event.description, 18),
+        ];
+      }
+    );
+
+    const pages: string[][][] = [];
+
+    if (tableRows.length === 0) {
+      pages.push([]);
+    } else {
+      for (
+        let index = 0;
+        index < tableRows.length;
+        index += rowsPerPage
+      ) {
+        pages.push(
+          tableRows.slice(
+            index,
+            index + rowsPerPage
+          )
+        );
+      }
+    }
+
+    const objects: string[] = [];
+    const catalogId = 1;
+    const pagesId = 2;
+    const regularFontId = 3;
+    const boldFontId = 4;
+
+    const pageObjectIds: number[] = [];
+    const contentObjectIds: number[] = [];
+    let nextObjectId = 5;
+
+    pages.forEach(() => {
+      pageObjectIds.push(nextObjectId++);
+      contentObjectIds.push(nextObjectId++);
+    });
+
+    objects[catalogId] =
+      `<< /Type /Catalog /Pages ${pagesId} 0 R >>`;
+
+    objects[regularFontId] =
+      "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>";
+
+    objects[boldFontId] =
+      "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>";
+
+    const textCommand = (
+      value: unknown,
+      x: number,
+      y: number,
+      bold = false,
+      size = 8
+    ) =>
+      `BT /${bold ? "F2" : "F1"} ${size} Tf ${x} ${y} Td (${pdfEscape(
+        value
+      )}) Tj ET`;
+
+    pages.forEach((pageRows, pageIndex) => {
+      const commands: string[] = [];
+
+      // Document title.
+      commands.push(
+        textCommand(
+          `Calendar Events - ${monthName} ${exportYear}`,
+          marginX,
+          555,
+          true,
+          16
+        )
+      );
+
+      commands.push(
+        textCommand(
+          `Total Events: ${selected.length}`,
+          marginX,
+          535,
+          false,
+          9
+        )
+      );
+
+      if (selected.length === 0) {
+        commands.push(
+          textCommand(
+            "No calendar events found for the selected month and year.",
+            marginX,
+            495,
+            false,
+            11
+          )
+        );
+      } else {
+        let x = marginX;
+
+        // Header background.
+        commands.push(
+          `0.93 g ${marginX} ${tableTop - headerHeight} 762 ${headerHeight} re f 0 g`
+        );
+
+        // Header labels.
+        columns.forEach((column) => {
+          commands.push(
+            textCommand(
+              column.label,
+              x + 5,
+              tableTop - 18,
+              true,
+              8
+            )
+          );
+          x += column.width;
+        });
+
+        // Rows.
+        pageRows.forEach(
+          (row, rowIndex) => {
+            const top =
+              tableTop -
+              headerHeight -
+              rowIndex * rowHeight;
+            const bottom =
+              top - rowHeight;
+
+            // Light alternating row background.
+            if (rowIndex % 2 === 1) {
+              commands.push(
+                `0.97 g ${marginX} ${bottom} 762 ${rowHeight} re f 0 g`
+              );
+            }
+
+            let cellX = marginX;
+
+            row.forEach(
+              (cell, columnIndex) => {
+                commands.push(
+                  textCommand(
+                    cell,
+                    cellX + 5,
+                    bottom + 9,
+                    false,
+                    7
+                  )
+                );
+
+                cellX +=
+                  columns[columnIndex].width;
+              }
+            );
+          }
+        );
+
+        // Table grid.
+        const visibleRows =
+          pageRows.length;
+        const tableBottom =
+          tableTop -
+          headerHeight -
+          visibleRows * rowHeight;
+
+        commands.push(
+          `0.75 G 0.5 w ${marginX} ${tableBottom} 762 ${
+            headerHeight +
+            visibleRows * rowHeight
+          } re S`
+        );
+
+        let verticalX = marginX;
+
+        columns
+          .slice(0, -1)
+          .forEach((column) => {
+            verticalX += column.width;
+            commands.push(
+              `0.82 G 0.4 w ${verticalX} ${tableBottom} m ${verticalX} ${tableTop} l S`
+            );
+          });
+
+        commands.push(
+          `0.75 G 0.5 w ${marginX} ${
+            tableTop - headerHeight
+          } m ${marginX + 762} ${
+            tableTop - headerHeight
+          } l S`
+        );
+
+        for (
+          let rowIndex = 1;
+          rowIndex <= visibleRows;
+          rowIndex++
+        ) {
+          const y =
+            tableTop -
+            headerHeight -
+            rowIndex * rowHeight;
+
+          commands.push(
+            `0.86 G 0.35 w ${marginX} ${y} m ${
+              marginX + 762
+            } ${y} l S`
+          );
+        }
+      }
+
+      // Page number.
+      commands.push(
+        textCommand(
+          `Page ${pageIndex + 1} of ${pages.length}`,
+          730,
+          25,
+          false,
+          8
+        )
+      );
+
+      const content =
+        commands.join("\n");
+
+      const contentId =
+        contentObjectIds[pageIndex];
+      const pageId =
+        pageObjectIds[pageIndex];
+
+      objects[contentId] =
+        `<< /Length ${content.length} >>\nstream\n${content}\nendstream`;
+
+      objects[pageId] =
+        `<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /Font << /F1 ${regularFontId} 0 R /F2 ${boldFontId} 0 R >> >> /Contents ${contentId} 0 R >>`;
+    });
+
+    objects[pagesId] =
+      `<< /Type /Pages /Kids [${pageObjectIds
+        .map((id) => `${id} 0 R`)
+        .join(" ")}] /Count ${pageObjectIds.length} >>`;
+
+    let pdf = "%PDF-1.4\n";
+    const offsets: number[] = [0];
+
+    for (
+      let id = 1;
+      id < objects.length;
+      id++
+    ) {
+      offsets[id] = pdf.length;
+      pdf += `${id} 0 obj\n${objects[id]}\nendobj\n`;
+    }
+
+    const xrefOffset = pdf.length;
+
+    pdf += `xref\n0 ${objects.length}\n`;
+    pdf += "0000000000 65535 f \n";
+
+    for (
+      let id = 1;
+      id < objects.length;
+      id++
+    ) {
+      pdf += `${String(
+        offsets[id]
+      ).padStart(10, "0")} 00000 n \n`;
+    }
+
+    pdf +=
+      `trailer\n<< /Size ${objects.length} /Root ${catalogId} 0 R >>\n` +
+      `startxref\n${xrefOffset}\n%%EOF`;
+
+    const blob = new Blob(
+      [pdf],
+      {
+        type: "application/pdf",
+      }
+    );
+
+    const url =
+      URL.createObjectURL(blob);
+    const link =
+      document.createElement("a");
+
+    link.href = url;
+    link.download =
+      `calendar-${monthName}-${exportYear}.pdf`;
+
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+
+    setShowExportCalendar(false);
+  }
+
+  /* ========================================
      EDIT CALENDAR
   ======================================== */
 
@@ -1095,7 +1950,11 @@ export default function CalendarManagementPage() {
 
     if (
       !title ||
-      !eventType
+      !eventType ||
+      !startDate ||
+      !endDate ||
+      !startTime ||
+      !endTime
     ) {
       alert(
         "Please fill all required fields."
@@ -1181,10 +2040,44 @@ export default function CalendarManagementPage() {
     resetForm();
   }
 
-  function getPublishAudienceOptions() {
+  function getSpecificTenantOptions() {
     if (!loginData) return [];
 
-    const learner =
+    // Platform roles can publish to any tenant category.
+    if (
+      loginData.role === "SUPER_ADMIN" ||
+      loginData.role === "PLATFORM_ADMIN"
+    ) {
+      return [
+        { value: "UNIVERSITY", label: "University & College" },
+        { value: "SKILL_ACADEMY", label: "Skill Academy" },
+        { value: "BOOTCAMP", label: "Bootcamp" },
+        { value: "CORPORATE", label: "Corporate" },
+      ];
+    }
+
+    // Tenant roles can publish only inside their own tenant.
+    const labels: Record<string, string> = {
+      UNIVERSITY: "University & College",
+      SKILL_ACADEMY: "Skill Academy",
+      BOOTCAMP: "Bootcamp",
+      CORPORATE: "Corporate",
+    };
+
+    return [
+      {
+        value: loginData.tenantType,
+        label:
+          labels[loginData.tenantType] ||
+          loginData.displayTenant,
+      },
+    ];
+  }
+
+  function getSpecificActorOptions() {
+    if (!loginData) return [];
+
+    const learnerLabel =
       loginData.tenantType === "CORPORATE"
         ? "Employees"
         : loginData.tenantType === "BOOTCAMP"
@@ -1193,7 +2086,7 @@ export default function CalendarManagementPage() {
             ? "Skill Academy Learners"
             : "Students";
 
-    const faculty =
+    const facultyLabel =
       loginData.tenantType === "CORPORATE"
         ? "Trainers"
         : loginData.tenantType === "BOOTCAMP"
@@ -1202,7 +2095,7 @@ export default function CalendarManagementPage() {
             ? "Trainers"
             : "Faculty";
 
-    const instituteAdmins =
+    const instituteAdminLabel =
       loginData.tenantType === "CORPORATE"
         ? "Corporate Admins"
         : loginData.tenantType === "BOOTCAMP"
@@ -1214,41 +2107,71 @@ export default function CalendarManagementPage() {
     switch (loginData.role) {
       case "SUPER_ADMIN":
         return [
-          "All Allowed Users",
-          "Platform Admins",
-          instituteAdmins,
-          "Coordinators",
-          faculty,
-          learner,
+          { value: "PLATFORM_ADMIN", label: "Platform Admins" },
+          { value: "TENANT_ADMIN", label: instituteAdminLabel },
+          { value: "COORDINATOR", label: "Coordinators" },
+          { value: "FACULTY", label: facultyLabel },
+          { value: "LEARNER", label: learnerLabel },
         ];
 
       case "PLATFORM_ADMIN":
         return [
-          instituteAdmins,
-          "Coordinators",
-          faculty,
-          learner,
+          { value: "TENANT_ADMIN", label: instituteAdminLabel },
+          { value: "COORDINATOR", label: "Coordinators" },
+          { value: "FACULTY", label: facultyLabel },
+          { value: "LEARNER", label: learnerLabel },
         ];
 
       case "TENANT_ADMIN":
         return [
-          "Coordinators",
-          faculty,
-          learner,
+          { value: "COORDINATOR", label: "Coordinators" },
+          { value: "FACULTY", label: facultyLabel },
+          { value: "LEARNER", label: learnerLabel },
         ];
 
       case "COORDINATOR":
         return [
-          faculty,
-          learner,
+          { value: "FACULTY", label: facultyLabel },
+          { value: "LEARNER", label: learnerLabel },
         ];
 
       case "FACULTY":
-        return [learner];
+        return [
+          { value: "LEARNER", label: learnerLabel },
+        ];
 
       default:
         return [];
     }
+  }
+
+  function buildPublishAudienceValue() {
+    if (!loginData) return "";
+
+    if (publishAudienceMode === "DEFAULT") {
+      return `DEFAULT:${loginData.role}`;
+    }
+
+    if (!publishAudienceTarget) {
+      return publishAudience;
+    }
+
+    if (
+      publishTenantTarget &&
+      publishAudienceTarget &&
+      publishAudienceMode === "ACTOR"
+    ) {
+      return `TENANT_ACTOR:${publishTenantTarget}:${publishAudienceTarget}`;
+    }
+
+    if (
+      publishAudienceMode === "TENANT" &&
+      publishTenantTarget
+    ) {
+      return `TENANT:${publishTenantTarget}`;
+    }
+
+    return `${publishAudienceMode}:${publishAudienceTarget}`;
   }
 
   function openPublishForm(
@@ -1259,15 +2182,16 @@ export default function CalendarManagementPage() {
     setPublishEndDate(event.endDate || "");
     setPublishStartTime(event.startTime || "");
     setPublishEndTime(event.endTime || "");
-    const allowedAudiences =
-      getPublishAudienceOptions();
-
-    setPublishAudience(
-      event.audience &&
-      allowedAudiences.includes(event.audience)
-        ? event.audience
-        : ""
+    setPublishOrganizer(
+      event.dataPoints?.organizer || ""
     );
+    setPublishAction("PUBLISH");
+    setShowAudienceOptions(false);
+    setPublishAudienceMode("DEFAULT");
+    setPublishAudienceTarget("");
+    setPublishTenantTarget("");
+    setPublishAudience("");
+    setPublishAudienceMode("DEFAULT");
     setOpenActionEventId(null);
     setShowPublishModal(true);
   }
@@ -1284,11 +2208,13 @@ export default function CalendarManagementPage() {
     calendarService.updateEvent(
       publishEvent.id,
       {
-        startDate: publishStartDate,
-        endDate: publishEndDate,
-        startTime: publishStartTime,
-        endTime: publishEndTime,
-        audience: publishAudience,
+        audience:
+          buildPublishAudienceValue(),
+        dataPoints: {
+          ...(publishEvent.dataPoints || {}),
+          organizer: publishOrganizer,
+          publishMode: "PUBLISH",
+        },
         status: "PUBLISHED",
       } as Partial<CalendarEvent>
     );
@@ -1297,6 +2223,67 @@ export default function CalendarManagementPage() {
     setShowPublishModal(false);
     setPublishEvent(null);
   }
+
+  function handleAutoPublishSave(
+    event: FormEvent<HTMLFormElement>
+  ) {
+    event.preventDefault();
+
+    if (
+      !publishEvent ||
+      !autoPublishDate ||
+      !autoPublishTime
+    ) {
+      return;
+    }
+
+    const scheduledDateTime = new Date(
+      `${autoPublishDate}T${autoPublishTime}:00`
+    );
+
+    if (
+      Number.isNaN(
+        scheduledDateTime.getTime()
+      )
+    ) {
+      alert(
+        "Please select a valid publish date and time."
+      );
+      return;
+    }
+
+    const publishImmediately =
+      scheduledDateTime.getTime() <=
+      Date.now();
+
+    calendarService.updateEvent(
+      publishEvent.id,
+      {
+        audience:
+          buildPublishAudienceValue(),
+        dataPoints: {
+          ...(publishEvent.dataPoints || {}),
+          organizer: publishOrganizer,
+          publishMode: "AUTO_PUBLISH",
+          autoPublishDate,
+          autoPublishTime,
+          scheduledAt:
+            `${autoPublishDate}T${autoPublishTime}`,
+        },
+        status: publishImmediately
+          ? "PUBLISHED"
+          : "SCHEDULED",
+      } as Partial<CalendarEvent>
+    );
+
+    refreshEvents();
+    setShowAutoPublishModal(false);
+    setShowPublishModal(false);
+    setPublishEvent(null);
+    setAutoPublishDate("");
+    setAutoPublishTime("");
+  }
+
 
   function getReuseTitle(
     event: CalendarEvent
@@ -1421,6 +2408,70 @@ export default function CalendarManagementPage() {
 
     refreshEvents();
   }
+
+  const showAdminEventFilters =
+    loginData?.role === "SUPER_ADMIN" ||
+    loginData?.role === "PLATFORM_ADMIN";
+
+  const getFilterTenant = (event: CalendarEvent) => {
+    const current = event as CalendarEvent & {
+      tenantId?: string;
+      dataPoints?: Record<string, string>;
+    };
+
+    const audience = event.audience || "";
+
+    if (audience.startsWith("TENANT:")) {
+      return audience.split(":")[1] || "";
+    }
+
+    if (audience.startsWith("TENANT_ACTOR:")) {
+      return audience.split(":")[1] || "";
+    }
+
+    return (
+      current.dataPoints?.targetTenant ||
+      current.dataPoints?.tenantType ||
+      current.tenantId ||
+      ""
+    );
+  };
+
+  const getFilterRole = (event: CalendarEvent) => {
+    const audience = event.audience || "";
+
+    if (audience.startsWith("ACTOR:")) {
+      return audience.split(":")[1] || "";
+    }
+
+    if (audience.startsWith("TENANT_ACTOR:")) {
+      return audience.split(":")[2] || "";
+    }
+
+    return "";
+  };
+
+  const filteredEvents = showAdminEventFilters
+    ? events.filter((event) => {
+        const current =
+          event as CalendarEvent & {
+            status?: string;
+          };
+
+        const tenant = getFilterTenant(event);
+        const role = getFilterRole(event);
+        const status = current.status || "DRAFT";
+
+        return (
+          (filterTenant === "ALL" ||
+            tenant === filterTenant) &&
+          (filterRole === "ALL" ||
+            role === filterRole) &&
+          (filterStatus === "ALL" ||
+            status === filterStatus)
+        );
+      })
+    : events;
 
   /* ========================================
      LOADING
@@ -1654,52 +2705,161 @@ export default function CalendarManagementPage() {
               ROLE / TENANT CALENDAR DATA
           ================================== */}
 
-          {/* =================================
-              PERMISSION INDICATOR
-          ================================== */}
+          {/* Calendar content */}
+
+          {showAdminEventFilters && (
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns:
+                  "repeat(4, minmax(0, 1fr))",
+                gap: "12px",
+                alignItems: "end",
+                padding: "14px",
+                marginBottom: "18px",
+                background: "#ffffff",
+                border: "1px solid #e5e7eb",
+                borderRadius: "10px",
+              }}
+            >
+              <FormField label="Tenant">
+                <select
+                  value={filterTenant}
+                  onChange={(event) =>
+                    setFilterTenant(event.target.value)
+                  }
+                  style={inputStyle}
+                >
+                  <option value="ALL">All Tenants</option>
+                  <option value="UNIVERSITY">
+                    University & College
+                  </option>
+                  <option value="SKILL_ACADEMY">
+                    Skill Academy
+                  </option>
+                  <option value="BOOTCAMP">
+                    Bootcamp
+                  </option>
+                  <option value="CORPORATE">
+                    Corporate
+                  </option>
+                </select>
+              </FormField>
+
+              <FormField label="Role">
+                <select
+                  value={filterRole}
+                  onChange={(event) =>
+                    setFilterRole(event.target.value)
+                  }
+                  style={inputStyle}
+                >
+                  <option value="ALL">All Roles</option>
+                  <option value="TENANT_ADMIN">
+                    Institute Admin
+                  </option>
+                  <option value="COORDINATOR">
+                    Coordinator
+                  </option>
+                  <option value="FACULTY">
+                    Faculty / Trainer
+                  </option>
+                  <option value="LEARNER">
+                    Student / Learner / Employee
+                  </option>
+                </select>
+              </FormField>
+
+              <FormField label="Status">
+                <select
+                  value={filterStatus}
+                  onChange={(event) =>
+                    setFilterStatus(event.target.value)
+                  }
+                  style={inputStyle}
+                >
+                  <option value="ALL">All Status</option>
+                  <option value="DRAFT">Draft</option>
+                  <option value="SCHEDULED">Scheduled</option>
+                  <option value="PUBLISHED">Published</option>
+                </select>
+              </FormField>
+
+              <FormField label="Clear">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFilterTenant("ALL");
+                    setFilterRole("ALL");
+                    setFilterStatus("ALL");
+                  }}
+                  style={{
+                    ...inputStyle,
+                    width: "100%",
+                    height: "42px",
+                    minHeight: "42px",
+                    margin: 0,
+                    padding: "0 14px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    background: "#ffffff",
+                    cursor: "pointer",
+                    fontWeight: 600,
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  Clear
+                </button>
+              </FormField>
+            </div>
+          )}
 
           <div
+            className={
+              isStudent
+                ? "student-calendar-layout"
+                : undefined
+            }
             style={{
-              display:
-                "inline-block",
-
-              padding:
-                "9px 15px",
-
-              marginBottom:
-                "20px",
-
-              borderRadius:
-                "8px",
-
-              background:
-                isStudent
-                  ? "#f3f4f6"
-                  : "#dcfce7",
-
-              color:
-                isStudent
-                  ? "#4b5563"
-                  : "#166534",
-
-              fontWeight:
-                500,
+              display: isStudent ? "grid" : "block",
+              gridTemplateColumns: isStudent
+                ? "minmax(560px, 1.15fr) minmax(360px, 0.85fr)"
+                : undefined,
+              gap: isStudent ? "24px" : undefined,
+              alignItems: "start",
+              width: "100%",
+              minWidth: 0,
             }}
           >
-            {isStudent
-              ? `${getTenantLearnerLabel()} View Only`
-              : "✓ Editing Enabled"}
-          </div>
-
           {/* =================================
               CALENDAR
           ================================== */}
 
           {calendar ? (
-            <CalendarView
+            <>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "flex-end",
+                  marginBottom: "12px",
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() =>
+                    setShowExportCalendar(true)
+                  }
+                  style={secondaryButton}
+                >
+                  Export Calendar
+                </button>
+              </div>
+
+              <CalendarView
               events={
-                Array.isArray(events)
-                  ? events
+                Array.isArray(filteredEvents)
+                  ? filteredEvents
                   : []
               }
 
@@ -1721,20 +2881,14 @@ export default function CalendarManagementPage() {
                 by clicking a date.
               */
 
-              onDateClick={
-                isStudent
-                  ? undefined
-                  : openAddEvent
-              }
+              onDateClick={undefined}
 
               /*
                 Student CAN click an event
                 to view its details.
               */
 
-              onEventClick={
-                openEvent
-              }
+              onEventClick={undefined}
 
               /*
                 Student cannot drag.
@@ -1746,6 +2900,7 @@ export default function CalendarManagementPage() {
                   : handleEventMove
               }
             />
+            </>
           ) : (
             <div
               style={{
@@ -1790,7 +2945,7 @@ export default function CalendarManagementPage() {
           {calendar && (
             <section
               style={{
-                marginTop: "24px",
+                marginTop: isStudent ? "0" : "24px",
                 background: "#ffffff",
                 border: "1px solid #e5e7eb",
                 borderRadius: "12px",
@@ -1833,11 +2988,11 @@ export default function CalendarManagementPage() {
                     color: "#6b7280",
                   }}
                 >
-                  {events.length} {events.length === 1 ? "event" : "events"}
+                  {filteredEvents.length} {filteredEvents.length === 1 ? "event" : "events"}
                 </span>
               </div>
 
-              {events.length === 0 ? (
+              {filteredEvents.length === 0 ? (
                 <div
                   style={{
                     padding: "18px",
@@ -1856,7 +3011,7 @@ export default function CalendarManagementPage() {
                     gap: "10px",
                   }}
                 >
-                  {[...events]
+                  {[...filteredEvents]
                     .sort((a, b) => {
                       const first = `${a.startDate} ${a.startTime || "00:00"}`;
                       const second = `${b.startDate} ${b.startTime || "00:00"}`;
@@ -1867,24 +3022,6 @@ export default function CalendarManagementPage() {
                         key={
                           scheduledEvent.id
                         }
-                        onClick={() =>
-                          openEvent(
-                            scheduledEvent
-                          )
-                        }
-                        onKeyDown={(event) => {
-                          if (
-                            event.key === "Enter" ||
-                            event.key === " "
-                          ) {
-                            event.preventDefault();
-                            openEvent(
-                              scheduledEvent
-                            );
-                          }
-                        }}
-                        role="button"
-                        tabIndex={0}
                         style={{
                           width: "100%",
                           textAlign: "left",
@@ -1977,6 +3114,70 @@ export default function CalendarManagementPage() {
                                 : ""}
                             </div>
                           )}
+
+                          <div
+                            style={{
+                              marginTop: "7px",
+                            }}
+                          >
+                            {(scheduledEvent as CalendarEvent & {
+                              status?: string;
+                            }).status === "PUBLISHED" ? (
+                              <span
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  padding: "3px 8px",
+                                  borderRadius: "999px",
+                                  background: "#dcfce7",
+                                  color: "#15803d",
+                                  fontSize: "11px",
+                                  fontWeight: 700,
+                                }}
+                              >
+                                Published
+                              </span>
+                            ) : (
+                              (scheduledEvent as CalendarEvent & {
+                                status?: string;
+                              }).status === "SCHEDULED" && (
+                                <span
+                                  style={{
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    padding: "3px 8px",
+                                    borderRadius: "999px",
+                                    background: "#fee2e2",
+                                    color: "#dc2626",
+                                    border:
+                                      "1px solid #fecaca",
+                                    fontSize: "11px",
+                                    fontWeight: 700,
+                                  }}
+                                >
+                                  Scheduled
+                                </span>
+                              )
+                            )}
+
+                            {(scheduledEvent as CalendarEvent & {
+                              status?: string;
+                            }).status === "SCHEDULED" && (
+                              <div
+                                style={{
+                                  marginTop: "4px",
+                                  fontSize: "11px",
+                                  color: "#6b7280",
+                                }}
+                              >
+                                {scheduledEvent.startDate}{" "}
+                                {scheduledEvent.startTime}
+                                {" → "}
+                                {scheduledEvent.endDate}{" "}
+                                {scheduledEvent.endTime}
+                              </div>
+                            )}
+                          </div>
                         </div>
 
                         {canManage && !isStudent && (
@@ -2039,54 +3240,82 @@ export default function CalendarManagementPage() {
                                   boxShadow: "0 10px 30px rgba(0,0,0,0.12)",
                                 }}
                               >
-                                {[
-                                  ["Edit", () => {
+                                <button
+                                  type="button"
+                                  onClick={() => {
                                     setOpenActionEventId(null);
                                     openEvent(scheduledEvent);
-                                  }],
-                                  ["Reuse", () =>
-                                    handleReuseEvent(scheduledEvent)
-                                  ],
-                                  ["Publish", () =>
-                                    openPublishForm(scheduledEvent)
-                                  ],
-                                  ["Delete", () => {
+                                  }}
+                                  style={actionMenuButtonStyle}
+                                >
+                                  Edit
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleReuseEvent(
+                                      scheduledEvent
+                                    )
+                                  }
+                                  style={actionMenuButtonStyle}
+                                >
+                                  Reuse
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    openPublishForm(
+                                      scheduledEvent
+                                    )
+                                  }
+                                  style={actionMenuButtonStyle}
+                                >
+                                  Publish
+                                </button>
+
+                                {(scheduledEvent as CalendarEvent & {
+                                  status?: string;
+                                }).status === "PUBLISHED" && (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      openReminderConfirmation(
+                                        scheduledEvent
+                                      )
+                                    }
+                                    style={actionMenuButtonStyle}
+                                  >
+                                    Send Reminder
+                                  </button>
+                                )}
+
+                                <button
+                                  type="button"
+                                  onClick={() => {
                                     const confirmed =
                                       window.confirm(
                                         "Are you sure you want to delete this event?"
                                       );
 
-                                    if (!confirmed) return;
+                                    if (!confirmed) {
+                                      return;
+                                    }
 
                                     calendarService.deleteEvent(
                                       scheduledEvent.id
                                     );
                                     setOpenActionEventId(null);
                                     refreshEvents();
-                                  }],
-                                ].map(([label, action]) => (
-                                  <button
-                                    key={label as string}
-                                    type="button"
-                                    onClick={action as () => void}
-                                    style={{
-                                      display: "block",
-                                      width: "100%",
-                                      padding: "9px 10px",
-                                      border: "none",
-                                      borderRadius: "6px",
-                                      background: "transparent",
-                                      textAlign: "left",
-                                      cursor: "pointer",
-                                      color:
-                                        label === "Delete"
-                                          ? "#b91c1c"
-                                          : "#374151",
-                                    }}
-                                  >
-                                    {label as string}
-                                  </button>
-                                ))}
+                                  }}
+                                  style={{
+                                    ...actionMenuButtonStyle,
+                                    color: "#b91c1c",
+                                  }}
+                                >
+                                  Delete
+                                </button>
                               </div>
                             )}
                           </div>
@@ -2097,6 +3326,34 @@ export default function CalendarManagementPage() {
               )}
             </section>
           )}
+          </div>
+          <style jsx global>{`
+            .student-calendar-layout > * {
+              min-width: 0;
+            }
+
+            .student-calendar-layout .fc {
+              min-width: 0;
+            }
+
+            .student-calendar-layout .fc-toolbar {
+              flex-wrap: wrap;
+              gap: 10px;
+            }
+
+            .student-calendar-layout .fc-toolbar-chunk {
+              display: flex;
+              align-items: center;
+              flex-wrap: wrap;
+              gap: 4px;
+            }
+
+            @media (max-width: 1180px) {
+              .student-calendar-layout {
+                grid-template-columns: 1fr !important;
+              }
+            }
+          `}</style>
         </main>
       </div>
 
@@ -2398,186 +3655,347 @@ export default function CalendarManagementPage() {
               </button>
             </div>
 
+<FormField label="Organizer">
+              <input
+                type="text"
+                value={publishOrganizer}
+                onChange={(event) =>
+                  setPublishOrganizer(
+                    event.target.value
+                  )
+                }
+                placeholder="Enter organizer"
+                style={inputStyle}
+              />
+            </FormField>
+
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "1fr 1fr",
-                gap: "15px",
+                gap: "10px",
               }}
             >
-              <FormField label="Start Date">
-                <input
-                  type="date"
-                  required
-                  value={publishStartDate}
-                  onChange={(event) =>
-                    setPublishStartDate(event.target.value)
-                  }
-                  style={inputStyle}
-                />
-              </FormField>
-
-              <FormField label="End Date">
-                <input
-                  type="date"
-                  required
-                  min={publishStartDate || undefined}
-                  value={publishEndDate}
-                  onChange={(event) =>
-                    setPublishEndDate(event.target.value)
-                  }
-                  style={inputStyle}
-                />
-              </FormField>
-
-              <FormField label="Start Time (24-hour)">
-                <select
-                  required
-                  value={publishStartTime}
-                  onChange={(event) =>
-                    setPublishStartTime(event.target.value)
-                  }
-                  style={inputStyle}
-                >
-                  <option value="">Select time</option>
-                  <option value="00:00">00:00</option>
-                  <option value="00:30">00:30</option>
-                  <option value="01:00">01:00</option>
-                  <option value="01:30">01:30</option>
-                  <option value="02:00">02:00</option>
-                  <option value="02:30">02:30</option>
-                  <option value="03:00">03:00</option>
-                  <option value="03:30">03:30</option>
-                  <option value="04:00">04:00</option>
-                  <option value="04:30">04:30</option>
-                  <option value="05:00">05:00</option>
-                  <option value="05:30">05:30</option>
-                  <option value="06:00">06:00</option>
-                  <option value="06:30">06:30</option>
-                  <option value="07:00">07:00</option>
-                  <option value="07:30">07:30</option>
-                  <option value="08:00">08:00</option>
-                  <option value="08:30">08:30</option>
-                  <option value="09:00">09:00</option>
-                  <option value="09:30">09:30</option>
-                  <option value="10:00">10:00</option>
-                  <option value="10:30">10:30</option>
-                  <option value="11:00">11:00</option>
-                  <option value="11:30">11:30</option>
-                  <option value="12:00">12:00</option>
-                  <option value="12:30">12:30</option>
-                  <option value="13:00">13:00</option>
-                  <option value="13:30">13:30</option>
-                  <option value="14:00">14:00</option>
-                  <option value="14:30">14:30</option>
-                  <option value="15:00">15:00</option>
-                  <option value="15:30">15:30</option>
-                  <option value="16:00">16:00</option>
-                  <option value="16:30">16:30</option>
-                  <option value="17:00">17:00</option>
-                  <option value="17:30">17:30</option>
-                  <option value="18:00">18:00</option>
-                  <option value="18:30">18:30</option>
-                  <option value="19:00">19:00</option>
-                  <option value="19:30">19:30</option>
-                  <option value="20:00">20:00</option>
-                  <option value="20:30">20:30</option>
-                  <option value="21:00">21:00</option>
-                  <option value="21:30">21:30</option>
-                  <option value="22:00">22:00</option>
-                  <option value="22:30">22:30</option>
-                  <option value="23:00">23:00</option>
-                  <option value="23:30">23:30</option>
-                </select>
-              </FormField>
-
-              <FormField label="End Time (24-hour)">
-                <select
-                  required
-                  value={publishEndTime}
-                  onChange={(event) =>
-                    setPublishEndTime(event.target.value)
-                  }
-                  style={inputStyle}
-                >
-                  <option value="">Select time</option>
-                  <option value="00:00">00:00</option>
-                  <option value="00:30">00:30</option>
-                  <option value="01:00">01:00</option>
-                  <option value="01:30">01:30</option>
-                  <option value="02:00">02:00</option>
-                  <option value="02:30">02:30</option>
-                  <option value="03:00">03:00</option>
-                  <option value="03:30">03:30</option>
-                  <option value="04:00">04:00</option>
-                  <option value="04:30">04:30</option>
-                  <option value="05:00">05:00</option>
-                  <option value="05:30">05:30</option>
-                  <option value="06:00">06:00</option>
-                  <option value="06:30">06:30</option>
-                  <option value="07:00">07:00</option>
-                  <option value="07:30">07:30</option>
-                  <option value="08:00">08:00</option>
-                  <option value="08:30">08:30</option>
-                  <option value="09:00">09:00</option>
-                  <option value="09:30">09:30</option>
-                  <option value="10:00">10:00</option>
-                  <option value="10:30">10:30</option>
-                  <option value="11:00">11:00</option>
-                  <option value="11:30">11:30</option>
-                  <option value="12:00">12:00</option>
-                  <option value="12:30">12:30</option>
-                  <option value="13:00">13:00</option>
-                  <option value="13:30">13:30</option>
-                  <option value="14:00">14:00</option>
-                  <option value="14:30">14:30</option>
-                  <option value="15:00">15:00</option>
-                  <option value="15:30">15:30</option>
-                  <option value="16:00">16:00</option>
-                  <option value="16:30">16:30</option>
-                  <option value="17:00">17:00</option>
-                  <option value="17:30">17:30</option>
-                  <option value="18:00">18:00</option>
-                  <option value="18:30">18:30</option>
-                  <option value="19:00">19:00</option>
-                  <option value="19:30">19:30</option>
-                  <option value="20:00">20:00</option>
-                  <option value="20:30">20:30</option>
-                  <option value="21:00">21:00</option>
-                  <option value="21:30">21:30</option>
-                  <option value="22:00">22:00</option>
-                  <option value="22:30">22:30</option>
-                  <option value="23:00">23:00</option>
-                  <option value="23:30">23:30</option>
-                </select>
-              </FormField>
-            </div>
-
-            <FormField label="Audience">
-              <select
-                required
-                value={publishAudience}
-                onChange={(event) =>
-                  setPublishAudience(event.target.value)
-                }
-                style={inputStyle}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  position: "relative",
+                  width: "fit-content",
+                }}
               >
-                <option value="">
-                  Select audience
-                </option>
+                <label
+                  style={{
+                    fontSize: "14px",
+                    fontWeight: 500,
+                    color: "#111827",
+                  }}
+                >
+                  Audience
+                </label>
 
-                {getPublishAudienceOptions().map(
-                  (option) => (
-                    <option
-                      key={option}
-                      value={option}
-                    >
-                      {option}
-                    </option>
-                  )
+                <button
+                  type="button"
+                  aria-label="Choose audience"
+                  onClick={() =>
+                    setShowAudienceOptions(
+                      (current) => !current
+                    )
+                  }
+                  style={{
+                    width: "27px",
+                    height: "27px",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    padding: 0,
+                    borderRadius: "7px",
+                    border: "1px solid #d1d5db",
+                    background: "#ffffff",
+                    color: "#111827",
+                    cursor: "pointer",
+                    fontSize: "19px",
+                    fontWeight: 600,
+                    lineHeight: 1,
+                  }}
+                >
+                  +
+                </button>
+
+                {showAudienceOptions && (
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: "34px",
+                      left: "78px",
+                      zIndex: 60,
+                      width: "205px",
+                      padding: "6px",
+                      borderRadius: "10px",
+                      border: "1px solid #e5e7eb",
+                      background: "#ffffff",
+                      boxShadow:
+                        "0 10px 25px rgba(15, 23, 42, 0.14)",
+                    }}
+                  >
+                    {[
+                      ["DEFAULT", "Default"],
+                      ["TENANT", "Specific Tenant"],
+                      ["ACTOR", "Specific Actor"],
+                    ].map(([value, label]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => {
+                          if (value === "DEFAULT") {
+                            setPublishAudienceMode("DEFAULT");
+                            setPublishAudienceTarget("");
+                            setPublishTenantTarget("");
+                            setPublishAudience(
+                              `DEFAULT:${loginData?.role || ""}`
+                            );
+                            setShowAudienceOptions(false);
+                            return;
+                          }
+
+                          if (value === "TENANT") {
+                            setPublishAudienceMode("TENANT");
+                            setPublishAudienceTarget("");
+                            setPublishTenantTarget("");
+                            setPublishAudience("");
+                            return;
+                          }
+
+                          // Actor selection is always the second step.
+                          // Keep the tenant already selected.
+                          setPublishAudienceMode("ACTOR");
+                          setPublishAudienceTarget("");
+                          setPublishAudience(
+                            publishTenantTarget
+                              ? `TENANT:${publishTenantTarget}`
+                              : ""
+                          );
+                        }}
+                        style={{
+                          width: "100%",
+                          padding: "9px 10px",
+                          border: "none",
+                          borderRadius: "7px",
+                          background: "#ffffff",
+                          textAlign: "left",
+                          cursor: "pointer",
+                          fontSize: "13px",
+                          color: "#111827",
+                        }}
+                      >
+                        {label}
+                        <span
+                          style={{
+                            float: "right",
+                            color: "#9ca3af",
+                          }}
+                        >
+                          {value === "DEFAULT" ? "" : "›"}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
                 )}
-              </select>
-            </FormField>
+
+                {showAudienceOptions &&
+                  publishAudienceMode === "TENANT" && (
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: "34px",
+                        left: "291px",
+                        zIndex: 61,
+                        width: "220px",
+                        padding: "6px",
+                        borderRadius: "10px",
+                        border: "1px solid #e5e7eb",
+                        background: "#ffffff",
+                        boxShadow:
+                          "0 10px 25px rgba(15, 23, 42, 0.14)",
+                      }}
+                    >
+                      <div
+                        style={{
+                          padding: "7px 10px",
+                          fontSize: "12px",
+                          fontWeight: 600,
+                          color: "#6b7280",
+                        }}
+                      >
+                        Select Tenant
+                      </div>
+
+                      {getSpecificTenantOptions().map(
+                        (tenant) => (
+                          <button
+                            key={tenant.value}
+                            type="button"
+                            onClick={() => {
+                              setPublishTenantTarget(
+                                tenant.value
+                              );
+                              setPublishAudienceTarget(
+                                tenant.value
+                              );
+                              setPublishAudience(
+                                `TENANT:${tenant.value}`
+                              );
+
+                              // Tenant is step 1. Immediately continue
+                              // to step 2 so the actor can be selected.
+                              setPublishAudienceMode("ACTOR");
+                              setShowAudienceOptions(true);
+                            }}
+                            style={{
+                              width: "100%",
+                              padding: "9px 10px",
+                              border: "none",
+                              borderRadius: "7px",
+                              background: "#ffffff",
+                              textAlign: "left",
+                              cursor: "pointer",
+                              fontSize: "13px",
+                              color: "#111827",
+                            }}
+                          >
+                            {tenant.label}
+                          </button>
+                        )
+                      )}
+                    </div>
+                  )}
+
+                {showAudienceOptions &&
+                  publishAudienceMode === "ACTOR" && (
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: "34px",
+                        left: "291px",
+                        zIndex: 61,
+                        width: "220px",
+                        padding: "6px",
+                        borderRadius: "10px",
+                        border: "1px solid #e5e7eb",
+                        background: "#ffffff",
+                        boxShadow:
+                          "0 10px 25px rgba(15, 23, 42, 0.14)",
+                      }}
+                    >
+                      <div
+                        style={{
+                          padding: "7px 10px",
+                          fontSize: "12px",
+                          fontWeight: 600,
+                          color: "#6b7280",
+                        }}
+                      >
+                        Select Actor
+                      </div>
+
+                      {getSpecificActorOptions().map(
+                        (actor) => (
+                          <button
+                            key={actor.value}
+                            type="button"
+                            onClick={() => {
+                              setPublishAudienceTarget(
+                                actor.value
+                              );
+                              setPublishAudience(
+                                publishTenantTarget
+                                  ? `TENANT_ACTOR:${publishTenantTarget}:${actor.value}`
+                                  : `ACTOR:${actor.value}`
+                              );
+                              setShowAudienceOptions(false);
+                            }}
+                            style={{
+                              width: "100%",
+                              padding: "9px 10px",
+                              border: "none",
+                              borderRadius: "7px",
+                              background: "#ffffff",
+                              textAlign: "left",
+                              cursor: "pointer",
+                              fontSize: "13px",
+                              color: "#111827",
+                            }}
+                          >
+                            {actor.label}
+                          </button>
+                        )
+                      )}
+                    </div>
+                  )}
+              </div>
+
+              {publishAudienceMode === "DEFAULT" &&
+                publishAudience && (
+                  <div
+                    style={{
+                      padding: "10px 12px",
+                      borderRadius: "8px",
+                      background: "#f9fafb",
+                      border: "1px solid #e5e7eb",
+                      fontSize: "13px",
+                      color: "#4b5563",
+                    }}
+                  >
+                    Default audience selected: all allowed users below your role.
+                  </div>
+                )}
+
+              {(publishTenantTarget ||
+                publishAudienceTarget) && (
+                <div
+                  style={{
+                    padding: "10px 12px",
+                    borderRadius: "8px",
+                    background: "#f9fafb",
+                    border: "1px solid #e5e7eb",
+                    fontSize: "13px",
+                    color: "#4b5563",
+                  }}
+                >
+                  {publishTenantTarget && (
+                    <div>
+                      Selected tenant:{" "}
+                      {
+                        getSpecificTenantOptions().find(
+                          (tenant) =>
+                            tenant.value ===
+                            publishTenantTarget
+                        )?.label
+                      }
+                    </div>
+                  )}
+
+                  {publishAudienceTarget && (
+                      <div
+                        style={{
+                          marginTop: publishTenantTarget
+                            ? "4px"
+                            : "0",
+                        }}
+                      >
+                        Selected actor:{" "}
+                        {
+                          getSpecificActorOptions().find(
+                            (actor) =>
+                              actor.value ===
+                              publishAudienceTarget
+                          )?.label
+                        }
+                      </div>
+                    )}
+                </div>
+              )}
+            </div>
 
             <div
               style={{
@@ -2599,10 +4017,350 @@ export default function CalendarManagementPage() {
               </button>
 
               <button
+                type="button"
+                onClick={() => {
+                  setPublishAction("AUTO_PUBLISH");
+                  setAutoPublishDate("");
+                  setAutoPublishTime("");
+
+                  // Close the first Publish form and open the
+                  // dedicated Auto Publish scheduling form.
+                  setShowPublishModal(false);
+                  setShowAutoPublishModal(true);
+                }}
+                style={{
+                  ...primaryButton,
+                  background: "#ffffff",
+                  color: "#4f46e5",
+                  border: "1px solid #4f46e5",
+                }}
+              >
+                Auto Publish
+              </button>
+
+              <button
                 type="submit"
+                onClick={() =>
+                  setPublishAction("PUBLISH")
+                }
                 style={primaryButton}
               >
                 Publish
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {reminderEvent && (
+        <div
+          style={overlayStyle}
+          onMouseDown={(event) => {
+            if (
+              event.target ===
+              event.currentTarget
+            ) {
+              setReminderEvent(null);
+            }
+          }}
+        >
+          <div
+            style={{
+              ...modalStyle,
+              maxWidth: "480px",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent:
+                  "space-between",
+                gap: "16px",
+                marginBottom: "16px",
+              }}
+            >
+              <h2
+                style={{
+                  margin: 0,
+                  fontSize: "20px",
+                }}
+              >
+                Send Reminder
+              </h2>
+
+              <button
+                type="button"
+                onClick={() =>
+                  setReminderEvent(null)
+                }
+                aria-label="Close reminder"
+                style={{
+                  border: "none",
+                  background: "transparent",
+                  fontSize: "24px",
+                  lineHeight: 1,
+                  cursor: "pointer",
+                  color: "#6b7280",
+                }}
+              >
+                ×
+              </button>
+            </div>
+
+            <p
+              style={{
+                margin:
+                  "0 0 10px",
+                color: "#374151",
+                lineHeight: 1.6,
+              }}
+            >
+              Send reminder notification to
+              the selected audience for{" "}
+              <strong>
+                {reminderEvent.title}
+              </strong>
+              ?
+            </p>
+
+            <div
+              style={{
+                padding: "12px",
+                border:
+                  "1px solid #e5e7eb",
+                borderRadius: "8px",
+                background: "#f9fafb",
+                color: "#4b5563",
+                fontSize: "13px",
+                lineHeight: 1.6,
+              }}
+            >
+              <div>
+                <strong>Date:</strong>{" "}
+                {reminderEvent.startDate ||
+                  "-"}
+                {reminderEvent.endDate &&
+                reminderEvent.endDate !==
+                  reminderEvent.startDate
+                  ? ` - ${reminderEvent.endDate}`
+                  : ""}
+              </div>
+
+              <div>
+                <strong>Time:</strong>{" "}
+                {reminderEvent.startTime ||
+                  "-"}
+                {reminderEvent.endTime
+                  ? ` - ${reminderEvent.endTime}`
+                  : ""}
+              </div>
+
+              <div>
+                <strong>Audience:</strong>{" "}
+                {reminderEvent.audience ||
+                  "-"}
+              </div>
+            </div>
+
+            <div style={{ marginTop: "16px" }}>
+              <FormField label="Description">
+                <textarea
+                  value={reminderDescription}
+                  onChange={(event) =>
+                    setReminderDescription(event.target.value)
+                  }
+                  placeholder="Write reminder description..."
+                  maxLength={250}
+                  rows={4}
+                  style={{
+                    ...inputStyle,
+                    resize: "none",
+                  }}
+                />
+              </FormField>
+              <div
+                style={{
+                  marginTop: "5px",
+                  textAlign: "right",
+                  color: "#9ca3af",
+                  fontSize: "11px",
+                }}
+              >
+                {reminderDescription.length}/250
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                justifyContent:
+                  "flex-end",
+                gap: "10px",
+                marginTop: "20px",
+              }}
+            >
+              <button
+                type="button"
+                onClick={() =>
+                  setReminderEvent(null)
+                }
+                style={secondaryButton}
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                onClick={handleSendReminder}
+                style={primaryButton}
+              >
+                Send Reminder
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showExportCalendar && (
+        <div style={overlayStyle} onMouseDown={(e) => {
+          if (e.target === e.currentTarget) setShowExportCalendar(false);
+        }}>
+          <div style={{...modalStyle,maxWidth:"460px"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"20px"}}>
+              <h2 style={{margin:0}}>Export Calendar PDF</h2>
+              <button type="button" onClick={() => setShowExportCalendar(false)}
+                style={{border:"none",background:"transparent",fontSize:"24px",cursor:"pointer"}}>×</button>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"15px"}}>
+              <FormField label="Month">
+                <select value={exportMonth} onChange={(e) => setExportMonth(e.target.value)} style={inputStyle}>
+                  <option value="">Select Month</option>
+                  {EXPORT_MONTHS.map(([value,label]) => <option key={value} value={value}>{label}</option>)}
+                </select>
+              </FormField>
+              <FormField label="Year">
+                <select value={exportYear} onChange={(e) => setExportYear(e.target.value)} style={inputStyle}>
+                  {Array.from({length:11},(_,i)=>new Date().getFullYear()-5+i).map((year) =>
+                    <option key={year} value={String(year)}>{year}</option>
+                  )}
+                </select>
+              </FormField>
+            </div>
+            <div style={{display:"flex",justifyContent:"flex-end",gap:"10px",marginTop:"20px"}}>
+              <button type="button" onClick={() => setShowExportCalendar(false)} style={secondaryButton}>Cancel</button>
+              <button type="button" onClick={handleExportCalendar} style={primaryButton}>Download PDF</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showAutoPublishModal && publishEvent && (
+        <div
+          style={overlayStyle}
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setShowAutoPublishModal(false);
+            }
+          }}
+        >
+          <form
+            onSubmit={handleAutoPublishSave}
+            style={{
+              ...modalStyle,
+              maxWidth: "460px",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                marginBottom: "20px",
+              }}
+            >
+              <h2 style={{ margin: 0 }}>
+                Schedule Auto Publish
+              </h2>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAutoPublishModal(false);
+                  setShowPublishModal(true);
+                }}
+                style={{
+                  border: "none",
+                  background: "transparent",
+                  fontSize: "24px",
+                  cursor: "pointer",
+                }}
+              >
+                ×
+              </button>
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns:
+                  "1fr 1fr",
+                gap: "15px",
+              }}
+            >
+              <FormField label="Publish Date">
+                <input
+                  type="date"
+                  required
+                  value={autoPublishDate}
+                  onChange={(event) =>
+                    setAutoPublishDate(
+                      event.target.value
+                    )
+                  }
+                  style={inputStyle}
+                />
+              </FormField>
+
+              <FormField label="Publish Time">
+                <input
+                  type="time"
+                  required
+                  value={autoPublishTime}
+                  onChange={(event) =>
+                    setAutoPublishTime(
+                      event.target.value
+                    )
+                  }
+                  style={inputStyle}
+                />
+              </FormField>
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                gap: "10px",
+                marginTop: "20px",
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAutoPublishModal(false);
+                  setShowPublishModal(true);
+                }}
+                style={secondaryButton}
+              >
+                Cancel
+              </button>
+
+              <button
+                type="submit"
+                style={primaryButton}
+              >
+                Save Schedule
               </button>
             </div>
           </form>
@@ -2740,118 +4498,178 @@ export default function CalendarManagementPage() {
             </div>
 
             {/* =================================
-                EVENT NAME
+                EVENT TITLE / CATEGORY
             ================================== */}
 
-            <FormField
-              label="Event Name"
-            >
-              <input
-                type="text"
-
-                value={title}
-
-                required={
-                  !isStudent
-                }
-
-                readOnly={
-                  isStudent
-                }
-
-                onChange={(
-                  event
-                ) =>
-                  setTitle(
-                    event.target.value
-                  )
-                }
-
-                style={{
-                  ...inputStyle,
-
-                  background:
-                    isStudent
-                      ? "#f9fafb"
-                      : "#ffffff",
-                }}
-              />
-            </FormField>
-
-            {/* =================================
-                EVENT TYPE
-            ================================== */}
-
-            <FormField
-              label="Event Type"
-            >
+            <FormField label="Event Title">
               {isStudent ? (
                 <input
                   type="text"
-
-                  value={
-                    eventType
-                  }
-
+                  value={title}
                   readOnly
-
                   style={{
                     ...inputStyle,
-
-                    background:
-                      "#f9fafb",
+                    background: "#f9fafb",
                   }}
                 />
               ) : (
-                <select
-                  required
+                <ScrollableEventDropdown
+                  value={title}
+                  placeholder="Select or search Event Title"
+                  options={getDocumentEventOptions(loginData).map(
+                    (option) => option.title
+                  )}
+                  onChange={(selectedTitle) => {
+                    setTitle(selectedTitle);
+                    // Clear the previous subtitle whenever the category/title changes.
+                    setEventType("");
+                  }}
+                />
+              )}
+            </FormField>
 
-                  value={
-                    eventType
+            {/* =================================
+                EVENT SUBTITLE / RELATED OPTION
+            ================================== */}
+
+            <FormField label="Event Subtitle">
+              {isStudent ? (
+                <input
+                  type="text"
+                  value={eventType}
+                  readOnly
+                  style={{
+                    ...inputStyle,
+                    background: "#f9fafb",
+                  }}
+                />
+              ) : (
+                <ScrollableEventDropdown
+                  value={eventType}
+                  placeholder={
+                    title
+                      ? "Select or search Event Subtitle"
+                      : "Select Event Title first"
                   }
+                  options={
+                    getDocumentEventOptions(loginData).find(
+                      (option) => option.title === title
+                    )?.subtitles || []
+                  }
+                  onChange={(selectedSubtitle) =>
+                    setEventType(selectedSubtitle)
+                  }
+                  disabled={!title}
+                />
+              )}
+            </FormField>
 
-                  onChange={(
-                    event
-                  ) =>
-                    setEventType(
+            {/* =================================
+                EVENT DATE & TIME
+            ================================== */}
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns:
+                  "1fr 1fr",
+                gap: "15px",
+              }}
+            >
+              <FormField label="Start Date">
+                <input
+                  type="date"
+                  required={!isStudent}
+                  value={startDate}
+                  readOnly={isStudent}
+                  onChange={(event) =>
+                    setStartDate(
                       event.target.value
                     )
                   }
+                  style={{
+                    ...inputStyle,
+                    background: isStudent
+                      ? "#f9fafb"
+                      : "#ffffff",
+                  }}
+                />
+              </FormField>
 
-                  style={
-                    inputStyle
+              <FormField label="End Date">
+                <input
+                  type="date"
+                  required={!isStudent}
+                  min={
+                    startDate || undefined
                   }
-                >
-                  <option value="">
-                    Select Event Type
-                  </option>
-
-                  {getEventTypesForContext(loginData).map(
-                    (type) => (
-                      <option
-                        key={
-                          type
-                        }
-
-                        value={
-                          type
-                        }
-                      >
-                        {
-                          type
-                        }
-                      </option>
+                  value={endDate}
+                  readOnly={isStudent}
+                  onChange={(event) =>
+                    setEndDate(
+                      event.target.value
                     )
-                  )}
-                </select>
-              )}
-            </FormField>
+                  }
+                  style={{
+                    ...inputStyle,
+                    background: isStudent
+                      ? "#f9fafb"
+                      : "#ffffff",
+                  }}
+                />
+              </FormField>
+
+              <FormField label="Start Time">
+                <input
+                  type="time"
+                  required={!isStudent}
+                  value={startTime}
+                  readOnly={isStudent}
+                  onChange={(event) =>
+                    setStartTime(
+                      event.target.value
+                    )
+                  }
+                  style={{
+                    ...inputStyle,
+                    background: isStudent
+                      ? "#f9fafb"
+                      : "#ffffff",
+                  }}
+                />
+              </FormField>
+
+              <FormField label="End Time">
+                <input
+                  type="time"
+                  required={!isStudent}
+                  value={endTime}
+                  readOnly={isStudent}
+                  onChange={(event) =>
+                    setEndTime(
+                      event.target.value
+                    )
+                  }
+                  style={{
+                    ...inputStyle,
+                    background: isStudent
+                      ? "#f9fafb"
+                      : "#ffffff",
+                  }}
+                />
+              </FormField>
+            </div>
 
             {/* =================================
                 ROLE / TENANT DATA POINTS
             ================================== */}
 
-            {getDataPointsForContext(loginData).map((dataPoint) => {
+            {getDataPointsForContext(loginData)
+              .filter(
+                (dataPoint) =>
+                  dataPoint.label !== "Organizer"
+              )
+              .map((dataPoint) => {
               const dropdownOptions =
                 getDropdownOptionsForDataPoint(dataPoint);
 
@@ -2917,6 +4735,8 @@ export default function CalendarManagementPage() {
                   alignItems: "center",
                   gap: "8px",
                   marginBottom: "8px",
+                  position: "relative",
+                  width: "fit-content",
                 }}
               >
                 <label>
@@ -2926,7 +4746,7 @@ export default function CalendarManagementPage() {
                 <button
                   type="button"
                   onClick={() =>
-                    setShowAttachmentOptions(
+                    setShowAttachmentActionMenu(
                       (current) => !current
                     )
                   }
@@ -2945,79 +4765,117 @@ export default function CalendarManagementPage() {
                     fontSize: "18px",
                     fontWeight: 400,
                     lineHeight: 1,
-                    cursor: isStudent ? "default" : "pointer",
+                    cursor: isStudent
+                      ? "default"
+                      : "pointer",
                     flexShrink: 0,
                   }}
                   aria-label="Add attachment"
                 >
                   +
                 </button>
-              </div>
 
-              {showAttachmentOptions && !isStudent && (
-                <div
-                  style={{
-                    display: "flex",
-                    gap: "8px",
-                    flexWrap: "wrap",
-                  }}
-                >
-                  {[
-                    ["link", "Attach Link"],
-                    ["document", "Document / Device"],
-                  ].map(([value, label]) => (
-                    <button
-                      key={value}
-                      type="button"
-                      onClick={() =>
-                        setAttachmentType(value)
-                      }
+                {showAttachmentActionMenu &&
+                  !isStudent && (
+                    <div
                       style={{
-                        padding: "8px 12px",
-                        border: "1px solid #d1d5db",
-                        borderRadius: "7px",
-                        background:
-                          attachmentType === value
-                            ? "#eef2ff"
-                            : "#ffffff",
-                        cursor: "pointer",
+                        position: "absolute",
+                        top: "34px",
+                        left: "100%",
+                        zIndex: 70,
+                        width: "175px",
+                        padding: "6px",
+                        borderRadius: "10px",
+                        border:
+                          "1px solid #e5e7eb",
+                        background: "#ffffff",
+                        boxShadow:
+                          "0 10px 25px rgba(15, 23, 42, 0.14)",
                       }}
                     >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAttachmentType("link");
+                          setAttachmentValue("");
+                          setShowAttachmentOptions(true);
+                          setShowAttachmentActionMenu(false);
+                        }}
+                        style={{
+                          width: "100%",
+                          padding: "9px 10px",
+                          border: "none",
+                          borderRadius: "7px",
+                          background: "#ffffff",
+                          textAlign: "left",
+                          cursor: "pointer",
+                          fontSize: "13px",
+                          color: "#111827",
+                        }}
+                      >
+                        Attach Link
+                      </button>
 
-              {attachmentType === "link" && (
-                <input
-                  type="url"
-                  value={attachmentValue}
-                  placeholder="Paste attachment link"
-                  onChange={(event) =>
-                    setAttachmentValue(event.target.value)
-                  }
-                  style={{
-                    ...inputStyle,
-                    marginTop: "10px",
-                  }}
-                />
-              )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAttachmentType("document");
+                          setAttachmentValue("");
+                          setShowAttachmentOptions(true);
+                          setShowAttachmentActionMenu(false);
+                        }}
+                        style={{
+                          width: "100%",
+                          padding: "9px 10px",
+                          border: "none",
+                          borderRadius: "7px",
+                          background: "#ffffff",
+                          textAlign: "left",
+                          cursor: "pointer",
+                          fontSize: "13px",
+                          color: "#111827",
+                        }}
+                      >
+                        Choose File
+                      </button>
+                    </div>
+                  )}
+              </div>
 
-              {attachmentType === "document" && (
-                <input
-                  type="file"
-                  onChange={(event) =>
-                    setAttachmentValue(
-                      event.target.files?.[0]?.name || ""
-                    )
-                  }
-                  style={{
-                    ...inputStyle,
-                    marginTop: "10px",
-                  }}
-                />
-              )}
+              {showAttachmentOptions &&
+                !isStudent &&
+                attachmentType === "link" && (
+                  <input
+                    type="url"
+                    value={attachmentValue}
+                    placeholder="Attach Link"
+                    onChange={(event) =>
+                      setAttachmentValue(
+                        event.target.value
+                      )
+                    }
+                    style={inputStyle}
+                  />
+                )}
+
+              {showAttachmentOptions &&
+                !isStudent &&
+                attachmentType === "document" && (
+                  <input
+                    type="file"
+                    onChange={(event) => {
+                      const file =
+                        event.target.files?.[0];
+
+                      if (!file) return;
+
+                      setAttachmentValue(
+                        file.name
+                      );
+                    }}
+                    style={inputStyle}
+                  />
+                )}
             </div>
 
             {/* =================================
